@@ -61,6 +61,8 @@ struct WifiCreds {
 static WifiCreds s_creds;
 static const char *s_wifiSrc = "none";      /* flash | build | ap */
 static bool s_provisioning = false;
+static int  s_lastStaStatus = 0;            /* wl_status_t of the last failed join */
+static char s_triedSsid[33] = "";
 
 WiFiServer ctrlServer(CTRL_PORT);
 WiFiServer pipeServer(PIPE_PORT);
@@ -141,6 +143,9 @@ static void banner(void)
   ctrlPrintf("+READY mode=%s src=%s ssid=%s ip=%s boot0=%d nrst=%d baud=%d pipe=%d\r\n",
              s_provisioning ? "ap" : "sta", s_wifiSrc, activeSsid(), ipString().c_str(),
              digitalRead(PIN_BOOT0), digitalRead(PIN_NRST), PIPE_BAUD, PIPE_PORT);
+  if (s_provisioning && s_lastStaStatus != 0) {
+    ctrlPrintf("+LASTSTA tried=%s status=%d %s\r\n", s_triedSsid, s_lastStaStatus, staReason(s_lastStaStatus));
+  }
 }
 
 /* ---------------------------- provisioning ---------------------------- */
@@ -157,7 +162,9 @@ static void provisioningPage(void)
     "<label>Wi-Fi 名称</label><br><input name=ssid value='" + ssidArg + "' style='width:100%;padding:.5rem;margin:.3rem 0 1rem'>"
     "<label>Wi-Fi 密码</label><br><input name=pass type=password style='width:100%;padding:.5rem;margin:.3rem 0 1.2rem'>"
     "<button style='width:100%;padding:.6rem;font-size:1rem'>保存并连接</button></form>"
-    "<p style='color:#999;font-size:.8rem;margin-top:1.5rem'>当前来源: " + String(s_wifiSrc) + "</p></body>";
+    "<p style='color:#999;font-size:.8rem;margin-top:1.5rem'>当前来源: " + String(s_wifiSrc) +
+    (s_lastStaStatus ? "<br>上次连接 " + String(s_triedSsid) + " 失败: " + String(s_lastStaStatus) + " (" + String(staReason(s_lastStaStatus)) + ")" : "") +
+    "</p></body>";
   web.send(200, "text/html; charset=utf-8", html);
 }
 
@@ -190,14 +197,30 @@ static void startProvisioning(void)
   s_wifiSrc = "ap";
 }
 
+/** Plain-language reason, so the provisioning page can tell "5 GHz" from "wrong password". */
+static const char *staReason(int status)
+{
+  switch (status) {
+    case 0:  return "idle";
+    case 1:  return "no-ssid (2.4GHz? name? in range?)";
+    case 3:  return "connected";
+    case 4:  return "connect-failed";
+    case 5:  return "connection-lost";
+    case 6:  return "wrong-password";
+    default: return "disconnected";
+  }
+}
+
 static bool joinWifi(const char *ssid, const char *pass, uint32_t timeoutMs)
 {
   if (ssid == NULL || ssid[0] == '\0') return false;
   WiFi.mode(WIFI_STA);
   WiFi.setAutoReconnect(true);
   WiFi.begin(ssid, pass);
+  strncpy(s_triedSsid, ssid, sizeof(s_triedSsid) - 1);
   uint32_t t0 = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - t0 < timeoutMs) delay(150);
+  s_lastStaStatus = (int)WiFi.status();
   return WiFi.status() == WL_CONNECTED;
 }
 
@@ -245,9 +268,10 @@ static void handleCommand(String line)
     return;
   }
   if (line.equalsIgnoreCase("WIFI")) {
-    ctrlPrintf("+WIFI mode=%s src=%s ssid=%s ip=%s rssi=%d haveSaved=%d\r\n",
+    ctrlPrintf("+WIFI mode=%s src=%s ssid=%s ip=%s rssi=%d haveSaved=%d tried=%s last=%d:%s\r\n",
                s_provisioning ? "ap" : "sta", s_wifiSrc, activeSsid(), ipString().c_str(),
-               s_provisioning ? 0 : WiFi.RSSI(), credsValid() ? 1 : 0);
+               s_provisioning ? 0 : WiFi.RSSI(), credsValid() ? 1 : 0,
+               s_triedSsid, s_lastStaStatus, staReason(s_lastStaStatus));
     return;
   }
   if (line.equalsIgnoreCase("RESETWIFI")) {

@@ -76,6 +76,21 @@ contain the password in plain text.
 
 Verified builds: 315 KB of flash with credentials, 252 KB without.
 
+## Why did the join fail?
+
+The firmware remembers the last station attempt and reports it:
+
+| Where | Field |
+| --- | --- |
+| control port | `+LASTSTA tried=<ssid> status=<n> <reason>` right after `+READY`, and `tried=`/`last=` in `+WIFI`/`+STATUS` |
+| provisioning page | a line under the form: 上次连接 <ssid> 失败: <n> (<reason>) |
+
+| status | meaning | what to check |
+| --- | --- | --- |
+| 1 | no-ssid | **the ESP8266 is 2.4 GHz only** - a 5 GHz-only SSID can never be seen; enable 2.4 GHz on the hotspot/router, or use the 2.4 GHz name |
+| 4 | connect-failed | encryption (WPA3-only, enterprise) or MAC filtering |
+| 6 | wrong-password | retype it on the provisioning page |
+
 ## Troubleshooting
 
 | Symptom | Cause |
