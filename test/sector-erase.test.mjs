@@ -22,10 +22,10 @@ class FakePipe {
 
 const extendedPipe = new FakePipe()
 await new Stm32UartBootloader(extendedPipe).eraseSectors([0, 1], { extended: true })
-/* 44 BB | N=0002 | sectors 0000 0001 | checksum 00^02^00^00^00^01 = 03 */
-check('extended sector erase frame', extendedPipe.writes[1] === '00020000000103', extendedPipe.writes.join(' '))
+/* 44 BB | N=0001 (count-1) | sectors 0000 0001 | checksum 00^01^00^00^00^01 = 00 */
+check('extended sector erase frame', extendedPipe.writes[1] === '00010000000100', extendedPipe.writes.join(' '))
 
 const legacyPipe = new FakePipe()
 await new Stm32UartBootloader(legacyPipe).eraseSectors([0, 1], { extended: false })
-/* 43 BC | N=02 | sectors 00 01 | checksum 02^00^01 = 03 */
-check('legacy sector erase frame', legacyPipe.writes[1] === '02000103', legacyPipe.writes.join(' '))
+/* 43 BC | N=01 (count-1) | sectors 00 01 | checksum 01^00^01 = 00 */
+check('legacy sector erase frame', legacyPipe.writes[1] === '01000100', legacyPipe.writes.join(' '))
