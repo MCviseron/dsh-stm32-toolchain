@@ -34,6 +34,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Tests: runtime, settings, client, client-primitives, jump, vscode, lease,
   presentation, paths, no-project, smoke, bridge.
 
+### Added
+
+- **ESP-01S Wi-Fi bridge firmware** (`firmware/esp01s/`): two TCP servers (3333 control
+  lines, 3334 raw UART pipe), BOOT0/NRST driving (`BOOTLOADER`/`RUN`), EEPROM credential
+  storage with a provisioning AP + captive portal, and a three-step credential priority
+  (EEPROM → baked-in → provisioning).
+- **Generated-firmware flow**: the panel's Wi-Fi fields feed `gen-firmware`, which writes
+  `wifi_creds.h` into a temporary sketch copy and compiles it with the Arduino ESP8266 core
+  (no credentials on a command line), then `flash-esp` writes that `.bin` to the ESP over
+  USB-TTL. Exposed to the agent as `stm32_esp_firmware`.
+- The Wi-Fi password never leaves the bridge (`/state` reports `hasPass` only).
 ### Changed
 
 - Settings apply immediately where possible: presentation goes through a

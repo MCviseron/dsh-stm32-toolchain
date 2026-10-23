@@ -148,6 +148,23 @@ the bridge child never restarted.
 | 传输 / 串口 / 波特率 / 重试 / ESP 主机端口 | panel actions, persisted in `.state.json` | no |
 | 启用插件, 注入工作规范, 桥接端口, 单次工具超时 | host load time (mount, prompt, routes, mcp client) | **yes** |
 
+## Wi-Fi flashing (0.2.0, in progress)
+
+An ESP-01S wired to the board's USART can replace the USB cable. Two halves ship today:
+
+| Half | What it does |
+| --- | --- |
+| Firmware (`firmware/esp01s`) | joins your Wi-Fi (or falls back to a provisioning AP), serves a control port 3333 and a raw UART pipe on 3334, and drives BOOT0/NRST |
+| Panel rows | 烧录设置 → **Wi-Fi 名称** / **Wi-Fi 密码** → **生成固件** (bakes the credentials in and compiles) → **烧到 ESP** (USB-TTL, GPIO0 grounded) |
+
+The agent can do the same through `stm32_esp_firmware` (action `build` / `flash` / `status`).
+Credentials live in the plugin's `.state.json`, are never sent to the browser, and the
+generated `.bin` (which contains the password in plain text) stays inside the gitignored
+`firmware/esp01s/build/`.
+
+Flashing the **STM32** over that link (`transport: wifi`) is the next step; until then the
+ESP halves are useful on their own for wiring and provisioning tests.
+
 ## Tools
 
 | Tool | What it does |
