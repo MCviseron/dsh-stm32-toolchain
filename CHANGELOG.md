@@ -1,5 +1,12 @@
 # 更新日志
 
+## [Unreleased]
+
+### 变更
+
+- CI：新增 `.github/workflows/publish.yml`（推 `v*` tag → 测试 → 校验 tag 与版本一致 → `npm publish --provenance`，OIDC 免令牌）与 `check.yml`（推 main / PR 跑语法与测试）。
+- 安装说明补充 `pnpm add dsh-stm32-toolchain`（npm 渠道），源码联接安装保留。
+
 本文件记录项目的所有重要变更。格式参考
 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循
 [语义化版本](https://semver.org/lang/zh-CN/)。

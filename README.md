@@ -23,9 +23,18 @@
 
 ## 安装
 
+从 npm（推荐，插件已发布为 `dsh-stm32-toolchain`）：
+
 ```bash
 # 在你的 DSH profile 里（例如 ~/.dsh/profiles/desktop）
-pnpm add link:D:/path/to/dsh-stm32-toolchain
+pnpm add dsh-stm32-toolchain
+```
+
+从源码（改代码时用，构建产物 `lib/` 已随仓库提交，克隆即用）：
+
+```bash
+pnpm add link:C:/Users/<你>/.dsh/stm32-toolchain-plugin   # 指向仓库的联接
+# 或直接用本地路径：pnpm add link:D:/Program/DSH-Plugin-Class/dsh-stm32-toolchain
 ```
 
 ```yaml
