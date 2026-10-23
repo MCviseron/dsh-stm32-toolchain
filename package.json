@@ -94,5 +94,6 @@
       ],
       "platform": "web"
     }
-  }
+  },
+  "packageManager": "pnpm@10.6.3"
 }

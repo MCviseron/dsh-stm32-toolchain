@@ -24,9 +24,18 @@ into one main-page panel and one set of agent tools - including flashing over Wi
 
 ## Install
 
+From npm (recommended, published as `dsh-stm32-toolchain`):
+
 ```bash
 # inside your DSH profile (for example ~/.dsh/profiles/desktop)
-pnpm add link:D:/path/to/dsh-stm32-toolchain
+pnpm add dsh-stm32-toolchain
+```
+
+From source (when you work on the plugin; the built `lib/` is committed, so a clone is usable):
+
+```bash
+pnpm add link:C:/Users/<you>/.dsh/stm32-toolchain-plugin
+# or point straight at the checkout: pnpm add link:D:/Program/DSH-Plugin-Class/dsh-stm32-toolchain
 ```
 
 ```yaml
