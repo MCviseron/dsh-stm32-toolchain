@@ -8,6 +8,29 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 > change log of the work that produced 0.1.0. Entries below summarise real
 > changes; the original wording is lost.
 
+## [0.2.0] - 2026-10-24
+
+### Added
+- **Wi-Fi flashing**: AN3155 over an ESP bridge (`transport: wifi`), fully automatic - the bridge sets BOOT0 and pulses NRST, so no button press is needed once both wires are solid.
+- ESP firmware now defaults to the **ESP-12E / NodeMCU** carrier (D2 = BOOT0, D1 = NRST - neither is a boot strap); the ESP-01S still builds with `BOARD_NODEMCU=0`, and the panel has a board selector.
+- **Wireless serial monitor**: the panel can open its monitor on the ESP pipe instead of a COM port (无线串口).
+- **ESP discovery** (自动探测 ESP): scans the private subnets for a control port that answers `+STATUS` and adopts the address.
+- **Environment checklist** in the sidebar: Keil, licence, CubeMX, python+pyserial, serial ports, ESP bridge, arduino-cli and the current project, each with a fix hint.
+- **CubeMX card and toolbar actions**: open the project's `.ioc` in the GUI or regenerate code headlessly, with progress and result reporting.
+- **Recent projects** dropdown (last ten, newest first).
+- **Quick-start help** dialog (`?`) with the five-step flow, the ESP-12E wiring table and the usual failures; the entry prompt now documents the Wi-Fi flow for new sessions.
+- Serial **HEX** view and a **显示发送** toggle; sent lines are echoed with an arrow.
+- Contract tests (`test/ui-contract.test.mjs`, `test/env-check.test.mjs`, `test/sector-erase.test.mjs`, `test/write-memory.test.mjs`, `test/discover.test.mjs`).
+
+### Fixed
+- AN3155 sector erase sends **N = sectors - 1** (the plain count made the bootloader wait for another sector code: a silent 30 s timeout), and only the sectors the image touches are erased.
+- Write memory uses the three ACK boundaries and pads the payload to four bytes, as the F4 bootloader requires.
+- A NAK sends the bootloader back to "waiting for 0x7F"; commands now re-sync and retry once instead of silently failing.
+- `Get (0x00)` is optional on parts that NAK it (`GetID` identifies the chip).
+- Panel layout: cards five per row, the log area fills the space below the panel (measured, not `100vh`), the environment checklist collapses so it stops squeezing the diagnostics.
+- `Card` renders its children, so buttons are no longer dropped.
+- Serial echo and the 显示发送 toggle actually work (an earlier multi-line edit silently matched nothing).
+
 ## [0.1.0] - 2026-10-23
 
 ### Added

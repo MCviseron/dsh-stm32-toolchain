@@ -1,24 +1,24 @@
 {
   "name": "dsh-stm32-toolchain",
-  "version": "0.1.0",
-  "description": "DeepSeek Harness (DSH) plugin: drives STM32 builds (Keil uVision CLI) and flashing (ST-Link or the UART system bootloader) from one main-page panel and one set of agent tools.",
+  "version": "0.2.0",
+  "description": "DSH plugin: Keil build, STM32CubeMX, serial monitor and flashing (ST-Link, UART bootloader, Wi-Fi bridge) in one panel",
   "license": "MIT",
   "author": {
     "name": "dsh-stm32-toolchain contributors"
   },
   "keywords": [
     "dsh",
-    "dsh-plugin",
     "deepseek-harness",
-    "plugin",
+    "dsh-plugin",
     "stm32",
     "keil",
     "uvision",
-    "stm32cubeprogrammer",
-    "bootloader",
-    "uart",
-    "st-link",
-    "embedded"
+    "stm32cubemx",
+    "embedded",
+    "flashing",
+    "an3155",
+    "esp8266",
+    "wifi"
   ],
   "repository": {
     "type": "git",
@@ -39,11 +39,12 @@
   },
   "files": [
     "lib",
-    "src",
-    "test",
+    "firmware/esp01s/esp01s.ino",
+    "firmware/esp01s/README.md",
     "docs",
     "cordis.patch.yml",
     "README.md",
+    "README.en.md",
     "CHANGELOG.md",
     "LICENSE"
   ],
