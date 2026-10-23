@@ -339,6 +339,7 @@ void setup()
   nrstSet(1);
 
   WiFi.persistent(false);
+  WiFi.setSleepMode(WIFI_NONE_SLEEP);   /* modem sleep stalls TCP sessions on this chip */
   credsLoad();
 
   bool ok = false;
@@ -375,6 +376,9 @@ void loop()
     if (WiFi.getMode() == WIFI_STA) s_provisioning = false;   /* saved + rebooted */
   }
 
+  if (ctrlClient && !ctrlClient.connected()) {
+    ctrlClient.stop();
+  }
   if (!ctrlClient || !ctrlClient.connected()) {
     WiFiClient fresh = ctrlServer.available();
     if (fresh) {
@@ -382,6 +386,9 @@ void loop()
       ctrlClient.setNoDelay(true);
       banner();
     }
+  }
+  if (pipeClient && !pipeClient.connected()) {
+    pipeClient.stop();
   }
   if (!pipeClient || !pipeClient.connected()) {
     WiFiClient fresh = pipeServer.available();
