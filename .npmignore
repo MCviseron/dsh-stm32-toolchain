@@ -1,0 +1,7 @@
+test/_*
+firmware/*/build/
+.tmp/
+.state.json
+.lock.json
+*.log
+*.tgz

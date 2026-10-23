@@ -1,31 +1,32 @@
 # dsh-stm32-toolchain
 
-A DeepSeek Harness (DSH) plugin that turns **Keil + STM32CubeMX + a serial terminal + a flasher** into one
-main-page panel and one set of agent tools.
+把 **Keil + STM32CubeMX + 串口终端 + 烧录器** 收进一个 DSH 主页面板、一整套 Agent 工具的 DeepSeek Harness（DSH）插件 —— 还包括**不插线的 Wi-Fi 烧录**。
 
-- Build headlessly with the Keil CLI you already licence (`UV4 -b`), read structured diagnostics instead of a log wall.
-- Flash with the project's ST-Link (`UV4 -f`) **or** with the STM32 system bootloader over UART (AN3155) - the same code path a Wi-Fi bridge will use.
-- Watch the serial port, the build log and the flash log in one live stream; jump from an error to the exact VS Code line.
-- Everything is also exposed as `mcp__stm32__*` tools, so the agent can build, flash and read logs itself.
+- 用你已经授权的 Keil 命令行（`UV4 -b`）**无界面编译**，拿到结构化诊断而不是一屏日志。
+- 三种烧录方式：工程自带的 ST-Link（`UV4 -f`）、USB-TTL 走 STM32 系统 bootloader（AN3155）、**同一套 bootloader 经 ESP 桥接走 Wi-Fi**。
+- 编译 / 烧录 / 串口在**一个实时日志流**里；点一条诊断直接在 VS Code 跳到 file:line。
+- 全部能力同时以 `mcp__stm32__*` 工具暴露，AI 能自己编译、烧录、读日志。
 
-## Requirements
+[English](README.en.md)
 
-| Component | Notes |
+## 环境要求
+
+| 组件 | 说明 |
 | --- | --- |
-| DSH desktop \>= 0.2 | plugin host; 0.1.5 also works |
-| Keil MDK (uVision 5) | `UV4.exe`; a commercial/Lite licence is used exactly as the GUI would |
-| Python 3 + pyserial | serial monitor and UART flashing (`pip install pyserial`) |
-| STM32CubeMX | optional, for `stm32_cube_gen` |
-| ST-Link | optional, for the `swd` transport |
+| DSH desktop >= 0.2 | 插件宿主 |
+| Keil MDK (uVision 5) | `UV4.exe`，用你自己的许可证，和 GUI 行为一致 |
+| Python 3 + pyserial | 串口监视与串口烧录（`pip install pyserial`） |
+| STM32CubeMX | 可选：`stm32_cube_gen`、面板的「打开 .ioc」「生成代码」 |
+| arduino-cli + ESP8266 核心 | 可选：只有要编译 ESP 桥接固件时才需要 |
+| ESP-12E / NodeMCU（推荐）或 ESP-01S | 可选：Wi-Fi 烧录与无线串口 |
+| ST-Link | 可选：`swd` 传输 |
 
-## Install
+## 安装
 
 ```bash
-# inside your DSH profile (for example ~/.dsh/profiles/desktop)
+# 在你的 DSH profile 里（例如 ~/.dsh/profiles/desktop）
 pnpm add link:D:/path/to/dsh-stm32-toolchain
 ```
-
-Then add the row to the profile so the host half actually loads:
 
 ```yaml
 # ~/.dsh/profiles/desktop/cordis.patch.yml
@@ -33,218 +34,137 @@ Then add the row to the profile so the host half actually loads:
   name: dsh-stm32-toolchain
   config:
     enabled: true
-    project: 'D:/work/firmware/Project.uvprojx'
+    project: 'D:/work/firmware/MDK-ARM/Project.uvprojx'
     transport: swd
 ```
 
-and reference the package in `package.json` -> `dsh.profile.bundles`. Restart DSH;
-the panel shows up on the main page and `mcp__stm32__*` tools appear.
+在 `package.json` 的 `dsh.profile.bundles` 里引用这个包，重启 DSH：侧边栏出现 **STM32 总管**，工具列表出现 `mcp__stm32__*`。
 
-## Settings (`Config`)
+## 设置（`Config`）
 
-| Field | Default | Meaning |
+| 字段 | 默认 | 含义 |
 | --- | --- | --- |
-| `enabled` | true | Mount or unmount the whole plugin |
-| `announceToAgent` | true | Inject the STM32 work rules into the system prompt |
-| `project` | '' | Default `.uvprojx`; the chip is read from its `<Device>` field |
-| `uv4Path` / `cubeMxPath` | '' | Empty means auto-detect (`D:\Keli_v5\UV4\UV4.exe`, registry, PATH) |
-| `transport` | `swd` | `swd` = ST-Link via `UV4 -f`; `uart` = system bootloader |
-| `serialPort` / `baud` | '' / 115200 | Port for monitoring and UART flashing |
-| `espHost` / `espPort` | '' / 23 | ESP-01S Wi-Fi bridge address (reserved for 0.2.0) |
-| `pythonPath` | '' | Python with pyserial; empty means auto-detect |
-| `httpPort` | 39021 | Loopback port of the bridge daemon (panel + SSE) |
-| `retry` | 3 | Bootloader sync retries |
-| `toolCallTimeoutMs` | 300000 | Per-tool timeout |
-| `cardOrder` | `chip,transport,port,firmware,build,flash,lease,logs` | Card order, position 1-8 (1-4 = first row) |
-| `logFontSize` / `logLineHeight` | 12 / 1.5 | Log text size and line height |
-| `logMaxLines` | 400 | Rendered log rows |
-| `logWrap` / `logTimestamps` | true / false | Wrap long lines / prefix each line with its time |
-| `logColorBuild` / `logColorFlash` / `logColorSerial` / `logColorSys` | '' | Per-channel text colours; empty keeps the theme default |
-| `logBgGradient` / `logBgFrom` / `logBgTo` | false / #0d1117 / #161b22 | Linear gradient behind the log panel |
+| `enabled` | true | 挂载/卸载整个插件 |
+| `announceToAgent` | true | 把 STM32 工作规范注入系统提示词 |
+| `project` | '' | 默认 `.uvprojx`；芯片型号取自它的 `<Device>` |
+| `uv4Path` / `cubeMxPath` | '' | 留空自动探测 |
+| `pythonPath` | '' | 带 pyserial 的 Python；留空自动探测 |
+| `httpPort` | 39021 | 桥接守护进程的回环端口（面板 + SSE） |
+| `toolCallTimeoutMs` | 300000 | 单次工具超时 |
+| `cardOrder` | `chip,transport,port,firmware,cube,build,flash,lease,logs` | 卡片顺序（每行 5 张） |
+| `logFontSize` / `logLineHeight` / `logMaxLines` | 12 / 1.5 / 400 | 日志文字 |
+| `logWrap` / `logTimestamps` | true / false | 自动换行 / 每行带时间 |
+| `logColorBuild` / `Flash` / `Serial` / `Sys` | '' | 各通道文字颜色，留空用主题色 |
+| `logBgGradient` / `logBgFrom` / `logBgTo` | false / #0d1117 / #161b22 | 日志区渐变背景 |
 
-In the card the six colour pickers are folded into a two-column grid (3 rows) to
-keep the section short; the gradient stops dim out while the gradient is off.
+**烧录参数不在设置页**，而在面板的「烧录设置」里 —— 它们属于"眼前这块板"。两侧都写进
+`<plugin>/.state.json`，永不覆盖 profile 配置。
 
-## The panel (main page)
+## 面板
 
-Open the **STM32 总管** entry in the sidebar; the panel fills the page:
+- **卡片每行 5 张**：芯片、传输、端口、固件、CubeMX / 编译、烧录、占用、日志。
+- **操作栏**：编译、烧录、一键编译 + 烧录（+ 看日志）、打开串口、HEX、无线串口、
+  打开 .ioc、生成代码、选择 .ioc…、VSCode、清空日志、烧录设置。
+- **日志流**：全部 / 编译 / 烧录 / 串口 / 系统 五个标签 + 过滤 + 跟随；串口标签同时是发送框，
+  发出的行会回显（「显示发送」开关）。
+- **工程卡片**：选择文件夹… / 扫描工程 / 使用此路径 / **最近工程**（最近十个，最新在前，
+  已删除的标 ✗）。
+- **环境卡片**：8 项检查并给出修复建议 —— Keil、许可证、CubeMX、Python+pyserial、串口设备、
+  ESP 桥接（控制端口 PING）、arduino-cli + ESP8266 核心、当前工程。全绿时收起，有失败项自动展开。
+- **诊断**：每条编译错误/警告一行，点击跳到 VS Code。
+- 状态只在一个地方显示：标题旁的状态灯和它右边的文字。
 
-- **Stat cards, four per row** - row 1 is identity (chip from the project's
-  `<Device>` -> transport -> serial port -> firmware size/time); row 2 is
-  activity (last build -> last flash -> current lease holder -> log volume and
-  bridge port).
-- **Action bar** - 编译 / 烧录 / 一键编译+烧录 / 打开串口 / VSCode / 清空日志
-  (dropdown: 清空当前日志 = only the selected tab, 全部 counts as everything; 清空所有日志 = the whole ring),
-  plus a transport switch and a serial-port picker (CH340, ST-Link VCP, ...).
-- **Log stream** - live SSE feed with tabs (全部/编译/烧录/串口/系统), text filter,
-  follow-tail toggle; the serial tab doubles as a sender (type + Enter).
-- **烧录设置** (toggle in the action bar) - transport, baud, bootloader retries,
-  ESP host/port; changes apply immediately and persist in `.state.json`.
-- **Project card** - 扫描工程 walks the usual roots for `.uvprojx` files, or paste
-  a path; the choice is remembered in `.state.json`.
-- **Officially styled controls** - every boolean uses the DSH `Switch` primitive
-  from `@deepseek-ai/dsh-client-ui-primitives` (injected via `dsh.client.inject`),
-  so the card matches the rest of the app; a plain checkbox is only a fallback
-  for a host without that package. The three dropdowns (serial port, transport,
-  discovered projects) use the same package's `Menu`, so their popup is drawn by
-  the app - rounded, themed, keyboard navigable - instead of the OS list.
-- **Diagnostics** - one clickable row per build error/warning; the click opens
-  VS Code at that file:line.
+## Wi-Fi 烧录
 
-Panel choices (project, transport, port, baud) persist in `<plugin>/.state.json`
-and never overwrite the profile settings.
-
-## Settings page
-
-`设置 → 插件 → STM32 工具链` renders a card that edits **only this plugin's
-namespace**. Every option is one row - label plus a one-line hint on the left, control on the
-right - separated by a hairline using the official `--dsw-alias-border-l` token
-(falling back to a neutral rgba when the host does not define it). The card keeps four categories - 常规 (the two switches), 工具链, 日志文字 and
-状态卡排序 - each heading sitting on the rule drawn by the row above, so a
-group boundary is still exactly one line. 保存 closes the card. The card edits **only this plugin's
-namespace** (`stm32-toolchain`): Keil/CubeMX/Python paths, default project,
-bridge port, tool timeout, enable + prompt-announcement switches. The
-auto-generated form is switched off (`configure({ auto: false })`) so there is
-exactly one page, and a stale revision surfaces as `SETTINGS_CONFLICT` instead
-of silently overwriting.
-
-Log text (size, line height, row cap, wrap, timestamps), the four channel colours,
-the optional background gradient and the **状态卡排序**
-list live on this card too; a **日志预览** block sits right under the log groups (before 状态卡排序) and
-renders four sample lines from the values currently in the form, so you see the
-effect before saving: eight numbered slots in **one** column, each
-moveable by the `≡` handle on the right (positions 1-4 render on row 1, 5-8 on
-row 2 of the panel). Dragging
-moves a slot rather than swapping two, and the drop target is highlighted while
-you hover. Saving re-applies the plugin, which is what pushes the new order to
-the running bridge.
-
-Flash parameters are deliberately **not** there - they live on the MCU page:
-
-| Where | What |
+| 组成 | 作用 |
 | --- | --- |
-| Settings card | toolchain paths, default project, bridge port, timeout, enable/announce |
-| STM32 总管 → 烧录设置 | transport (ST-Link / UART bootloader), baud, bootloader retries, ESP host/port |
+| 固件（`firmware/esp01s`） | 连接你的 Wi-Fi（失败则开配网热点），提供控制端口 3333 与裸串口管道 3334，驱动 BOOT0/NRST |
+| 面板 | 烧录设置 → Wi-Fi 名称 / 密码 → 生成固件（把凭据编进固件并编译）→ 烧到 ESP（USB-TTL） |
+| Agent | `stm32_esp_firmware` 的 `build` / `flash` / `status` / `detect` / `discover` |
 
-Both sides talk over the same two routes: `GET /settings/describe` (this
-namespace only) and `POST /settings/mutate` (`{ops, revision}`).
+接线（ESP-12E / NodeMCU，推荐）：
 
-On DSH >= 0.2 the profile entry's `volatile` fields arrive as live references;
-`apply()` unwraps them (`unwrapConfig`) before any consumer reads them.
-
-Presentation settings (card order, log text/colours/gradient) are additionally
-served by the host as `GET /api/dsh-stm32-toolchain/config` and projected from the
-live plugin config on every apply. The panel resyncs that route on mount, on SSE
-reconnect, every 5 s and after every action, so a saved setting shows up even if
-the bridge child never restarted.
-
-### When a setting takes effect
-
-| Setting | Applied by | Restart? |
+| ESP | STM32 | 用途 |
 | --- | --- | --- |
-| 状态卡顺序, 日志字号/行高/行数/换行/时间戳, 通道颜色, 渐变 | client store, on save | no |
-| 扫描根目录 | sent with each scan, read from the live config | no |
-| Keil / CubeMX / Python 路径, 默认工程 | `set-tools` posted to the bridge on save | no |
-| 传输 / 串口 / 波特率 / 重试 / ESP 主机端口 | panel actions, persisted in `.state.json` | no |
-| 启用插件, 注入工作规范, 桥接端口, 单次工具超时 | host load time (mount, prompt, routes, mcp client) | **yes** |
+| D2（GPIO4） | BOOT0 | 启动模式 |
+| D1（GPIO5） | NRST | 复位 |
+| TX | PA10 | USART1_RX |
+| RX | PA9 | USART1_TX |
+| GND | GND | 共地 |
 
-## Wi-Fi flashing (0.2.0, in progress)
+两根控制线接好后，Wi-Fi 烧录**不需要按任何键**：桥接拉高 BOOT0、给 NRST 一个脉冲、AN3155 握手
+在管道上跑完，随后 BOOT0 释放并复位进入新程序。
 
-An ESP-01S wired to the board's USART can replace the USB cable. Two halves ship today:
+热点会重新分配地址，面板的「**自动探测 ESP**」会扫描本网段中在 3333 端口返回 `+STATUS` 的主机并自动填入。
 
-| Half | What it does |
-| --- | --- |
-| Firmware (`firmware/esp01s`) | joins your Wi-Fi (or falls back to a provisioning AP), serves a control port 3333 and a raw UART pipe on 3334, and drives BOOT0/NRST |
-| Panel rows | 烧录设置 → **Wi-Fi 名称** / **Wi-Fi 密码** → **生成固件** (bakes the credentials in and compiles) → **烧到 ESP** (USB-TTL, GPIO0 grounded) |
+同一条管道也当**无线串口**用：勾上「无线串口」，串口监视器读的是 ESP 的 socket 而不是 COM 口。
+管道同时只服务一个客户端，所以烧录前会自动关闭监视器。
 
-The agent can do the same through `stm32_esp_firmware` (action `build` / `flash` / `status`).
-Credentials live in the plugin's `.state.json`, are never sent to the browser, and the
-generated `.bin` (which contains the password in plain text) stays inside the gitignored
-`firmware/esp01s/build/`.
+Wi-Fi 凭据存在 `.state.json` 里，不会发到浏览器；生成的 `.bin` 含明文密码，只留在被 gitignore 的
+`firmware/esp01s/build/` 内。
 
-Flashing the **STM32** over that link (`transport: wifi`) is the next step; until then the
-ESP halves are useful on their own for wiring and provisioning tests.
+### 传输方式
 
-### Transports
-
-| transport | path | needs |
+| transport | 路径 | 前提 |
 | --- | --- | --- |
-| `swd` | ST-Link via `UV4 -f` | a debugger wired to the board |
-| `uart` | AN3155 over a USB-TTL | BOOT0/NRST access, a COM port |
-| `wifi` | AN3155 through an ESP-01S | the ESP firmware, BOOT0/NRST wired to the ESP |
+| `swd` | ST-Link，`UV4 -f` | 接线到板子的调试器 |
+| `uart` | USB-TTL 上的 AN3155 | 能碰到 BOOT0/NRST，有 COM 口 |
+| `wifi` | 经 ESP 桥接的 AN3155 | ESP 固件，BOOT0/NRST 接到 ESP |
 
-Wi-Fi flashing reuses `lib/bootloader.mjs` unchanged: `lib/wifi.mjs` implements the
-same byte-pipe contract (`write` / `readByte` / `readExact` / `flush`) over two TCP
-sockets - 3333 control lines (BOOT0/NRST/BOOTLOADER/RUN) and 3334 raw UART. The
-ESP pulls BOOT0 high and pulses NRST before the handshake, and releases BOOT0 with
-a second reset after the last block.
+`lib/wifi.mjs` 满足与串口管道相同的字节契约，所以 `lib/bootloader.mjs`（AN3155：同步、GetID、
+按扇区擦除、三次握手写入并补齐 4 字节、GO）**一行不改**地复用。
 
-## Tools
+## 工具
 
-| Tool | What it does |
+| 工具 | 作用 |
 | --- | --- |
-| `stm32_doctor` | Keil path/version/licence, CubeMX, pyserial, COM ports, chip table, transports |
-| `stm32_status` | Phase, chip, transport, port, firmware size, last build/flash |
-| `stm32_project` | Device -> chip family, bootloader pins, outputs, ST-Link usage |
-| `stm32_build` | `UV4 -b` headless build, structured diagnostics |
-| `stm32_flash` | `swd` (UV4 -f) or `uart` (AN3155 mass erase + write + go) |
-| `stm32_deploy` | build then flash; `watch:<ms>` returns the post-flash serial log |
-| `stm32_checkout` | folder -> `.uvprojx` -> chip -> transport/port, one call |
-| `stm32_claim` | exclusive lease on the board (owner label, token, release/force) |
-| `stm32_serial` | open/close/write/tail the serial monitor |
-| `stm32_logs` | ring buffer query (channel, regex, since) |
-| `stm32_chips` | family table or one device resolution |
-| `stm32_ports` | serial ports with descriptions |
-| `stm32_open_vscode` | open `file:line` in VS Code |
-| `stm32_cube_gen` | headless `STM32CubeMX -q` regeneration from an `.ioc` |
+| `stm32_doctor` | Keil 路径/版本/许可证、CubeMX、pyserial、COM 口、芯片表 |
+| `stm32_status` | 阶段、芯片、传输、端口、固件大小、上次编译/烧录 |
+| `stm32_project` | Device → 芯片系列、bootloader 引脚、输出目录 |
+| `stm32_build` | `UV4 -b` 无界面编译 + 结构化诊断 |
+| `stm32_flash` | `swd` / `uart` / `wifi` |
+| `stm32_deploy` | 先编译再烧录；`watch:<ms>` 返回烧录后的串口输出 |
+| `stm32_checkout` | 文件夹 → `.uvprojx` → 芯片 → 传输/端口，一次调用 |
+| `stm32_claim` | 板级独占租约 |
+| `stm32_serial` | 串口监视器 open/close/write/tail |
+| `stm32_logs` | 环形日志查询（通道、正则、since） |
+| `stm32_chips` / `stm32_ports` | 芯片表 / 串口列表 |
+| `stm32_open_vscode` | 打开 `file:line` |
+| `stm32_cube_gen` | 从 `.ioc` 无界面重生成代码 |
+| `stm32_esp_firmware` | 编译 / 烧写 / 状态 / 检测 / 探测 ESP 桥接 |
 
-## Concurrency: two sessions, one board
+## 并发：两个会话，一块板
 
-The board is a single physical resource, and one plugin instance = one bridge
-process = **all sessions share it** (`@deepseek-ai/dsh-mcp-client` carries no
-session identity, so per-session state is not possible at the MCP boundary).
+板子是独占资源，一个插件实例 = 一个桥接进程 = 所有会话共享。
 
-What is enforced instead:
-
-| Layer | Mechanism |
+| 层次 | 机制 |
 | --- | --- |
-| Same process | every mutating action runs through one job `queue` (build/flash never overlap) |
-| Token-less callers | the panel (and an agent that never claims) share one implicit lease, so repeated buttons work; an explicit claim is protected from them and may take over an idle implicit lease, never a running one |
-| Same process, two owners | a **lease**: first caller claims implicitly; a different owner gets `BOARD_BUSY` with the holder name and age; TTL 180 s, renewed on every call **and every 15 s while a job runs**, so a slow build cannot be mistaken for an idle board; `GET /state` reports `lease{owner, heldSeconds, expiresInSeconds}` and the panel shows a real countdown (本地每秒重算) plus 强制释放 |
-| Two DSH instances | a `.lock.json` (pid + kind + 5 min TTL, pid liveness checked) refuses the second instance |
-| Serial port | Windows already makes COM ports exclusive; the error surfaces as "port busy" instead of a timeout |
+| 同进程 | 所有写操作走同一个任务队列，编译/烧录不会重叠 |
+| 无令牌调用 | 面板与未 claim 的 Agent 共享一个隐式租约 |
+| 两个持有者 | 租约：`BOARD_BUSY` 带上持有者与时长；TTL 180 秒，调用时续期，任务运行中每 15 秒续期 |
+| 两个 DSH 实例 | `.lock.json`（pid + 类型 + 5 分钟 TTL）拒绝第二个实例 |
+| 串口 | Windows 的 COM 口本身独占，报错是"端口被占用"而不是超时 |
 
-The agent is told (system prompt) to `stm32_claim` before a multi-step run and
-to pass the returned token to every mutating call.
+可调：`DSH_STM32_LEASE_TTL`（毫秒，默认 180000）、`DSH_STM32_LEASE_HEARTBEAT`（毫秒，默认 15000）。
 
-Knobs: `DSH_STM32_LEASE_TTL` (ms, default 180000) and
-`DSH_STM32_LEASE_HEARTBEAT` (ms, default 15000). An idle lease drops on its own
-and takes its owner label with it; a lease whose job is still running does not
-expire.
+## 增加新芯片
 
-## Adding a board
+`lib/chips.json` 里是系列默认值（bootloader 串口引脚、最高波特率、擦除方式、页大小）与逐型号条目。
+加一条、重启 DSH 即可，无需改代码。未知型号回退到 USART1/115200，面板会明确提示。
 
-`lib/chips.json` holds family defaults (bootloader UART pins, max baud, erase
-mode, flash page) and per-device entries. Add a device, restart DSH, done - no
-code change. Unknown devices fall back to USART1/115200 and the panel says so.
-
-## Wiring a Wi-Fi bridge
-
-See [`docs/WIRING.md`](docs/WIRING.md): ESP-01S power, BOOT0/NRST control and
-the reset-then-flash sequence.
-
-## Development
+## 开发
 
 ```bash
 pnpm install
-pnpm test        # core smoke test + bridge end-to-end (MCP + HTTP)
+pnpm test        # 单元 + 契约 + 桥接端到端
 ```
 
-Layout: `lib/runtime.mjs` (picks Node vs the desktop-bundled Node), `lib/core.mjs` (project/Keil/chip logic), `lib/serial.mjs` + `lib/serial-worker.py`
-(byte pipe over pyserial), `lib/bootloader.mjs` (AN3155), `lib/bridge.mjs`
-(state machine + HTTP/SSE + MCP), `lib/index.js` (DSH host half),
-`lib/client.js` (main-page panel).
+目录：`lib/runtime.mjs`（Node 选择）、`lib/core.mjs`（工程/Keil/芯片逻辑）、
+`lib/serial.mjs` + `lib/serial-worker.py`（pyserial 字节管道）、`lib/bootloader.mjs`（AN3155）、
+`lib/wifi.mjs`（ESP 控制行 + TCP 管道）、`lib/wifi-fw.mjs`（固件生成）、
+`lib/bridge.mjs`（状态机 + HTTP/SSE + MCP）、`lib/index.js`（DSH 宿主侧）、
+`lib/client.js`（主页面板）。
 
-## Licence
+## 许可证
 
 MIT
