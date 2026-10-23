@@ -14,7 +14,7 @@ function check(name, condition, detail) {
 check('the bridge can check the environment', bridge.includes("case 'env-check'"))
 check('the check covers every toolchain piece',
   ['keil', 'license', 'cube', 'python', 'ports', 'esp', 'arduino', 'project'].every((id) => bridge.includes("id: '" + id + "'")))
-check('the ESP is probed on its control port', bridge.includes('async function espPing'))
+check('the ESP is probed on its control port', /function espPing\\(/.test(bridge))
 check('every failing item carries a fix hint', (bridge.match(/need: '/g) || []).length >= 8)
 check('the panel renders the checklist', client.includes('"环境" + (state.env'))
 check('the panel can re-run the check', client.includes('run("env-check")'))
