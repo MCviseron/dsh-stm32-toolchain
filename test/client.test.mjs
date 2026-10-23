@@ -62,9 +62,9 @@ function countGrids(node, depth = 0) {
   if (!node || typeof node !== 'object' || depth > 60) return 0
   if (Array.isArray(node)) return node.reduce((sum, child) => sum + countGrids(child, depth + 1), 0)
   if (typeof node.type === 'function') return countGrids(node.type(node.props), depth + 1)
-  // Only the card rows use auto-fit columns; the body layout is a fixed 2-column grid.
+  // Card rows are the fixed five-column grid; the body layout is a 2-column grid.
   const style = (node.props && node.props.style) || {}
-  const own = style.display === 'grid' && String(style.gridTemplateColumns || '').includes('auto-fit') ? 1 : 0
+  const own = style.display === 'grid' && String(style.gridTemplateColumns || '') === 'repeat(5, minmax(0, 1fr))' ? 1 : 0
   return own + countGrids(node.props && node.props.children, depth + 1)
 }
 check('stat cards fill rows of five (nine cards -> two rows)', countGrids(tree) === 2, 'grids=' + countGrids(tree))
@@ -81,7 +81,7 @@ function cardRows(node, depth = 0, out = []) {
   if (Array.isArray(node)) { node.forEach((child) => cardRows(child, depth + 1, out)); return out }
   if (typeof node.type === 'function') return cardRows(node.type(node.props), depth + 1, out)
   const style = (node.props && node.props.style) || {}
-  if (style.display === 'grid' && String(style.gridTemplateColumns || '').includes('minmax(0, 1fr)')) out.push(cardLabels(node.props.children))
+  if (style.display === 'grid' && String(style.gridTemplateColumns || '') === 'repeat(5, minmax(0, 1fr))') out.push(cardLabels(node.props.children))
   return cardRows(node.props && node.props.children, depth + 1, out)
 }
 
