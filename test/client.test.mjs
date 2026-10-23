@@ -228,8 +228,10 @@ check('settings card exposes the log text fields',
   ['logFontSize', 'logLineHeight', 'logMaxLines', 'logWrap', 'logTimestamps'].every((key) => bundle.includes('"' + key + '"')))
 
 const rows = cardRows(tree)
-check('each row holds four cards', rows.length === 2 && rows[0].length === 4 && rows[1].length === 4, JSON.stringify(rows))
-check('row 1 is identity, row 2 is activity',
+check('rows hold four cards each, the ninth starts a third row',
+  rows.length === 3 && rows[0].length === 4 && rows[1].length === 4 && rows[2].length === 1, JSON.stringify(rows))
+check('row 1 is identity, row 2 is activity, row 3 is the log count',
   JSON.stringify(rows[0]) === JSON.stringify(['芯片', '传输', '端口', '固件']) &&
-  JSON.stringify(rows[1]) === JSON.stringify(['编译', '烧录', '占用', '日志']),
+  JSON.stringify(rows[1]) === JSON.stringify(['CubeMX', '编译', '烧录', '占用']) &&
+  JSON.stringify(rows[2]) === JSON.stringify(['日志']),
   JSON.stringify(rows))
