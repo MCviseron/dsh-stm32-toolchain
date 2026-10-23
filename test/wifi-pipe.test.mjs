@@ -44,7 +44,7 @@ const pipe = await WifiPipe.open('127.0.0.1', { ctrlPort, pipePort, timeoutMs: 3
 check('ping reaches the control port', (await pipe.ping()).includes('+PONG'), commands.at(-1))
 check('status reports the station', (await pipe.status()).includes('mode=sta'))
 
-await pipe.enterBootloader(100)
+await pipe.enterBootloader({ pulseMs: 100 })
 check('enterBootloader asserts BOOT0 then pulses reset',
   commands.slice(-2).join('|') === 'BOOT 1|PULSE 100', commands.slice(-2).join('|'))
 
@@ -63,6 +63,10 @@ await pipe.write([0xdd])
 let timedOut = ''
 try { await pipe.readByte(200) } catch (error) { timedOut = error.message }
 check('a silent peer times out instead of hanging', /超时/.test(timedOut), timedOut.slice(0, 40))
+
+await pipe.enterBootloader({ pulse: false })
+check('manual mode asserts BOOT0 without a reset pulse',
+  commands.at(-1) === 'BOOT 1', commands.at(-1))
 
 await pipe.run(50)
 check('run releases BOOT0', commands.slice(-2).join('|') === 'BOOT 0|PULSE 50', commands.slice(-2).join('|'))
