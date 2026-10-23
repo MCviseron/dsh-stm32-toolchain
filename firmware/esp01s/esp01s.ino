@@ -58,6 +58,14 @@
  *   2. firmware: once we are running, drive BOOT0 low and pulse NRST so the STM32
  *      re-samples a correct boot mode instead of sitting in the bootloader. */
 #define SELF_SYNC_STM32 1
+
+/* How GPIO0 drives NRST:
+ *   0 = direct wire (GPIO0 low = reset). Needs a diode so the STM32 cannot drag the
+ *       ESP strap low at power-up.
+ *   1 = open-collector stage: GPIO0 -> 1k -> base(NPN) or gate(N-MOS), emitter/source
+ *       to GND, collector/drain to NRST. GPIO0 high = reset. No shared net, so the
+ *       strap hazard disappears and a plain NPN/MOSFET is enough (no diode needed). */
+#define NRST_INVERTED 0
 /* ---------------------------------------------------------------------- */
 
 struct WifiCreds {
@@ -127,7 +135,16 @@ static String ipString(void)
 }
 
 static void boot0Set(int level) { digitalWrite(PIN_BOOT0, level ? HIGH : LOW); }
-static void nrstSet(int level)  { digitalWrite(PIN_NRST, level ? HIGH : LOW); }
+
+/** level 1 = reset released, 0 = reset asserted. */
+static void nrstSet(int level)
+{
+#if NRST_INVERTED
+  digitalWrite(PIN_NRST, level ? LOW : HIGH);   /* transistor on = reset asserted */
+#else
+  digitalWrite(PIN_NRST, level ? HIGH : LOW);
+#endif
+}
 
 static void nrstPulse(uint32_t ms)
 {

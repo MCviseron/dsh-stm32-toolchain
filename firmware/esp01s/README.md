@@ -96,6 +96,31 @@ Two defences, use both:
 If the reset pad cannot be identified, build with `manualReset` in mind: the flash
 flow can assert `BOOT0` only and let you press the board's reset button.
 
+### Driving NRST without a diode (transistor / MOSFET)
+
+A plain signal diode may not be at hand. Any small NPN (S8050, 2N3904) or logic-level
+N-MOSFET (2N7002, AO3400) gives a better result - an **open-collector reset driver**
+that shares no net with the ESP strap at all:
+
+```
+ESP GPIO0 --[1k]-- B(G)                collector(D) ---- STM32 NRST
+                  NPN / N-MOS          emitter(S)  ---- GND
+```
+
+Then build the firmware with `-DNRST_INVERTED=1` (GPIO0 **high** = reset asserted).
+Add a 10k from gate/base to GND if the MOSFET threshold is low.
+
+Bonus: while the ESP boots, GPIO0 is high, so the STM32 is held in reset and only
+starts once the sketch releases it - both chips come up in a defined order and the
+boot-mode strap can never be pulled low by the STM32.
+
+### A LED is not a substitute for that diode
+
+A red LED drops 1.8-2.0 V (green/blue/white 2.6-3.3 V). With the LED between NRST and
+GPIO0, driving GPIO0 low leaves NRST at ~1.8 V - above the STM32 input-low threshold
+(0.3 x VDD = 1.0 V), so the reset is never asserted. Use a transistor (above) or skip
+NRST entirely and flash with `manualReset`.
+
 ## Why did the join fail?
 
 The firmware remembers the last station attempt and reports it:
