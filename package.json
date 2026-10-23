@@ -22,11 +22,11 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/<owner>/dsh-stm32-toolchain.git"
+    "url": "git+https://github.com/MCviseron/dsh-stm32-toolchain.git"
   },
-  "homepage": "https://github.com/<owner>/dsh-stm32-toolchain#readme",
+  "homepage": "https://github.com/MCviseron/dsh-stm32-toolchain#readme",
   "bugs": {
-    "url": "https://github.com/<owner>/dsh-stm32-toolchain/issues"
+    "url": "https://github.com/MCviseron/dsh-stm32-toolchain/issues"
   },
   "type": "module",
   "main": "lib/index.js",
@@ -61,8 +61,7 @@
     "doctor": "node test/doctor.mjs"
   },
   "publishConfig": {
-    "access": "public",
-    "registry": "https://registry.npmjs.org"
+    "access": "public"
   },
   "dependencies": {
     "@deepseek-ai/dsh-mcp-client": "^0.1.5-rc.2 || ^0.2.0-rc.2 || ^0.2.1-rc.2",
