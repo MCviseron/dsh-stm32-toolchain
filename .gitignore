@@ -1,0 +1,7 @@
+node_modules/
+.tmp/
+.state.json
+*.log
+*.bak
+.DS_Store
+test/_*.mjs

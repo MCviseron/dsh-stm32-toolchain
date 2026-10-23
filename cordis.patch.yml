@@ -1,0 +1,35 @@
+# dsh-stm32-toolchain bundle patch: inserts the host row for this plugin.
+# The host half spawns lib/bridge.mjs (MCP stdio server + loopback HTTP/SSE)
+# and serves the panel's routes; the browser half renders the main-page card.
+- insert:
+    - id: stm32-toolchain
+      name: 'dsh-stm32-toolchain'
+      config:
+        enabled: true
+        announceToAgent: true
+        project: ''
+        uv4Path: ''
+        cubeMxPath: ''
+        transport: swd
+        serialPort: ''
+        baud: 115200
+        espHost: ''
+        espPort: 23
+        pythonPath: ''
+        httpPort: 39021
+        retry: 3
+        toolCallTimeoutMs: 300000
+        searchRoots: ''
+        cardOrder: 'chip,transport,port,firmware,build,flash,lease,logs'
+        logFontSize: 12
+        logLineHeight: 1.5
+        logMaxLines: 400
+        logWrap: true
+        logTimestamps: false
+        logColorBuild: ''
+        logColorFlash: ''
+        logColorSerial: ''
+        logColorSys: ''
+        logBgGradient: false
+        logBgFrom: '#0d1117'
+        logBgTo: '#161b22'

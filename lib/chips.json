@@ -1,0 +1,190 @@
+{
+  "version": 1,
+  "note": "Bootloader facts follow AN2606/AN3155. Add boards under devices; add a family here when one is missing.",
+  "families": {
+    "STM32F0": {
+      "uart": [
+        {
+          "p": "USART1",
+          "tx": "PA9",
+          "rx": "PA10"
+        }
+      ],
+      "maxBaud": 115200,
+      "flashPage": 1024,
+      "erase": "extended",
+      "reset": "nrst"
+    },
+    "STM32F1": {
+      "uart": [
+        {
+          "p": "USART1",
+          "tx": "PA9",
+          "rx": "PA10"
+        }
+      ],
+      "maxBaud": 115200,
+      "flashPage": 1024,
+      "erase": "standard",
+      "reset": "nrst"
+    },
+    "STM32F3": {
+      "uart": [
+        {
+          "p": "USART1",
+          "tx": "PA9",
+          "rx": "PA10"
+        }
+      ],
+      "maxBaud": 115200,
+      "flashPage": 2048,
+      "erase": "extended",
+      "reset": "nrst"
+    },
+    "STM32F4": {
+      "uart": [
+        {
+          "p": "USART1",
+          "tx": "PA9",
+          "rx": "PA10"
+        },
+        {
+          "p": "USART3",
+          "tx": "PB10",
+          "rx": "PB11"
+        }
+      ],
+      "maxBaud": 115200,
+      "flashPage": null,
+      "sectors": "4x16K,1x64K,7x128K",
+      "erase": "extended",
+      "reset": "nrst"
+    },
+    "STM32F7": {
+      "uart": [
+        {
+          "p": "USART1",
+          "tx": "PA9",
+          "rx": "PA10"
+        },
+        {
+          "p": "USART3",
+          "tx": "PB10",
+          "rx": "PB11"
+        }
+      ],
+      "maxBaud": 115200,
+      "flashPage": null,
+      "sectors": "4x32K,1x128K,3x256K",
+      "erase": "extended",
+      "reset": "nrst"
+    },
+    "STM32G0": {
+      "uart": [
+        {
+          "p": "USART1",
+          "tx": "PA9",
+          "rx": "PA10"
+        }
+      ],
+      "maxBaud": 115200,
+      "flashPage": 2048,
+      "erase": "extended",
+      "reset": "nrst"
+    },
+    "STM32G4": {
+      "uart": [
+        {
+          "p": "USART1",
+          "tx": "PA9",
+          "rx": "PA10"
+        },
+        {
+          "p": "USART3",
+          "tx": "PB10",
+          "rx": "PB11"
+        }
+      ],
+      "maxBaud": 115200,
+      "flashPage": 2048,
+      "erase": "extended",
+      "reset": "nrst"
+    },
+    "STM32L0": {
+      "uart": [
+        {
+          "p": "USART1",
+          "tx": "PA9",
+          "rx": "PA10"
+        }
+      ],
+      "maxBaud": 115200,
+      "flashPage": 128,
+      "erase": "extended",
+      "reset": "nrst"
+    },
+    "STM32L1": {
+      "uart": [
+        {
+          "p": "USART1",
+          "tx": "PA9",
+          "rx": "PA10"
+        }
+      ],
+      "maxBaud": 115200,
+      "flashPage": 256,
+      "erase": "extended",
+      "reset": "nrst"
+    },
+    "STM32L4": {
+      "uart": [
+        {
+          "p": "USART1",
+          "tx": "PA9",
+          "rx": "PA10"
+        }
+      ],
+      "maxBaud": 115200,
+      "flashPage": 2048,
+      "erase": "extended",
+      "reset": "nrst"
+    }
+  },
+  "devices": {
+    "STM32F103C8": {
+      "family": "STM32F1",
+      "flash": "64K",
+      "ram": "20K",
+      "note": "Blue Pill. PA9/PA10 are usually tied to the on-board CH340; use USART3 or lift the CH340 TX when the ESP bridge shares the port."
+    },
+    "STM32F407VE": {
+      "family": "STM32F4",
+      "flash": "512K",
+      "ram": "128K",
+      "note": "USART3 PB10/PB11 avoids the on-board CH340 collision."
+    },
+    "STM32F411CE": {
+      "family": "STM32F4",
+      "flash": "512K",
+      "ram": "128K",
+      "uart": [
+        {
+          "p": "USART1",
+          "tx": "PA9",
+          "rx": "PA10"
+        },
+        {
+          "p": "USART2",
+          "tx": "PA2",
+          "rx": "PA3"
+        },
+        {
+          "p": "USART6",
+          "tx": "PC6",
+          "rx": "PC7"
+        }
+      ],
+      "note": "Black Pill F411: no USART3 - use USART1/2/6 for the bootloader bridge."
+    }
+  }
+}

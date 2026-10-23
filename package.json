@@ -1,0 +1,98 @@
+{
+  "name": "dsh-stm32-toolchain",
+  "version": "0.1.0",
+  "description": "DeepSeek Harness (DSH) plugin: drives STM32 builds (Keil uVision CLI) and flashing (ST-Link or the UART system bootloader) from one main-page panel and one set of agent tools.",
+  "license": "MIT",
+  "author": {
+    "name": "dsh-stm32-toolchain contributors"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "plugin",
+    "stm32",
+    "keil",
+    "uvision",
+    "stm32cubeprogrammer",
+    "bootloader",
+    "uart",
+    "st-link",
+    "embedded"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/<owner>/dsh-stm32-toolchain.git"
+  },
+  "homepage": "https://github.com/<owner>/dsh-stm32-toolchain#readme",
+  "bugs": {
+    "url": "https://github.com/<owner>/dsh-stm32-toolchain/issues"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./bridge": "./lib/bridge.mjs",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "src",
+    "test",
+    "docs",
+    "cordis.patch.yml",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "os": [
+    "win32",
+    "darwin",
+    "linux"
+  ],
+  "scripts": {
+    "test": "node test/runtime.test.mjs && node test/settings.test.mjs && node test/client.test.mjs && node test/client-primitives.test.mjs && node test/jump.test.mjs && node test/vscode.test.mjs && node test/lease.test.mjs && node test/presentation.test.mjs && node test/paths.test.mjs && node test/no-project.test.mjs && node test/smoke.mjs && node test/bridge.test.mjs",
+    "doctor": "node test/doctor.mjs"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-mcp-client": "^0.1.5-rc.2 || ^0.2.0-rc.2 || ^0.2.1-rc.2",
+    "@deepseek-ai/schemastery": "^3.18.4"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "react": "^18.2.0",
+    "@deepseek-ai/dsh-client-ui-primitives": "^0.1.5-rc.2 || ^0.2.0-rc.2 || ^0.2.1-rc.2"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/cordis": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-client-ui-primitives": {
+      "optional": true
+    }
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-slots",
+        "@deepseek-ai/dsh-client-ui-primitives"
+      ],
+      "platform": "web"
+    }
+  }
+}
