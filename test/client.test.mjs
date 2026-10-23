@@ -67,7 +67,7 @@ function countGrids(node, depth = 0) {
   const own = style.display === 'grid' && String(style.gridTemplateColumns || '').includes('auto-fit') ? 1 : 0
   return own + countGrids(node.props && node.props.children, depth + 1)
 }
-check('stat cards fill rows of four (nine cards -> three rows)', countGrids(tree) === 3, 'grids=' + countGrids(tree))
+check('stat cards fill rows of five (nine cards -> two rows)', countGrids(tree) === 2, 'grids=' + countGrids(tree))
 
 /** Labels of the cards directly inside one card row. */
 function cardLabels(children) {
@@ -81,7 +81,7 @@ function cardRows(node, depth = 0, out = []) {
   if (Array.isArray(node)) { node.forEach((child) => cardRows(child, depth + 1, out)); return out }
   if (typeof node.type === 'function') return cardRows(node.type(node.props), depth + 1, out)
   const style = (node.props && node.props.style) || {}
-  if (style.display === 'grid' && String(style.gridTemplateColumns || '').includes('auto-fit')) out.push(cardLabels(node.props.children))
+  if (style.display === 'grid' && String(style.gridTemplateColumns || '').includes('minmax(0, 1fr)')) out.push(cardLabels(node.props.children))
   return cardRows(node.props && node.props.children, depth + 1, out)
 }
 
@@ -228,10 +228,9 @@ check('settings card exposes the log text fields',
   ['logFontSize', 'logLineHeight', 'logMaxLines', 'logWrap', 'logTimestamps'].every((key) => bundle.includes('"' + key + '"')))
 
 const rows = cardRows(tree)
-check('rows hold four cards each, the ninth starts a third row',
-  rows.length === 3 && rows[0].length === 4 && rows[1].length === 4 && rows[2].length === 1, JSON.stringify(rows))
-check('row 1 is identity, row 2 is activity, row 3 is the log count',
-  JSON.stringify(rows[0]) === JSON.stringify(['芯片', '传输', '端口', '固件']) &&
-  JSON.stringify(rows[1]) === JSON.stringify(['CubeMX', '编译', '烧录', '占用']) &&
-  JSON.stringify(rows[2]) === JSON.stringify(['日志']),
+check('rows hold five cards, then the rest',
+  rows.length === 2 && rows[0].length === 5 && rows[1].length === 4, JSON.stringify(rows))
+check('row 1 is identity plus CubeMX, row 2 is activity and logs',
+  JSON.stringify(rows[0]) === JSON.stringify(['芯片', '传输', '端口', '固件', 'CubeMX']) &&
+  JSON.stringify(rows[1]) === JSON.stringify(['编译', '烧录', '占用', '日志']),
   JSON.stringify(rows))
