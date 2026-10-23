@@ -67,7 +67,7 @@ function countGrids(node, depth = 0) {
   const own = style.display === 'grid' && String(style.gridTemplateColumns || '').includes('auto-fit') ? 1 : 0
   return own + countGrids(node.props && node.props.children, depth + 1)
 }
-check('stat cards sit on two rows', countGrids(tree) === 2, 'grids=' + countGrids(tree))
+check('stat cards fill rows of four (nine cards -> three rows)', countGrids(tree) === 3, 'grids=' + countGrids(tree))
 
 /** Labels of the cards directly inside one card row. */
 function cardLabels(children) {
@@ -91,9 +91,9 @@ check('bundle exports the order helper', internals && typeof internals.resolveOr
 const custom = internals.resolveOrder('logs,lease,build,flash,chip,transport,port,firmware')
 check('a custom order is honoured', custom[0] === 'logs' && custom[7] === 'firmware', custom.join(','))
 check('unknown and duplicate ids are dropped',
-  JSON.stringify(internals.resolveOrder('logs,logs,bogus,chip')) === JSON.stringify(['logs', 'chip', 'transport', 'port', 'firmware', 'build', 'flash', 'lease']),
+  JSON.stringify(internals.resolveOrder('logs,logs,bogus,chip')) === JSON.stringify(['logs', 'chip', 'transport', 'port', 'firmware', 'cube', 'build', 'flash', 'lease']),
   JSON.stringify(internals.resolveOrder('logs,logs,bogus,chip')))
-check('an empty order falls back to the default', internals.resolveOrder('').length === 8 && internals.resolveOrder('')[0] === 'chip')
+check('an empty order falls back to the default', internals.resolveOrder('').length === 9 && internals.resolveOrder('')[0] === 'chip', internals.resolveOrder('').join(','))
 check('dragging moves a slot, it does not swap',
   JSON.stringify(internals.moveCard(['a', 'b', 'c', 'd'], 0, 2)) === JSON.stringify(['b', 'c', 'a', 'd']) &&
   JSON.stringify(internals.moveCard(['a', 'b', 'c', 'd'], 3, 1)) === JSON.stringify(['a', 'd', 'b', 'c']),
