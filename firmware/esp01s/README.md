@@ -76,6 +76,26 @@ contain the password in plain text.
 
 Verified builds: 315 KB of flash with credentials, 252 KB without.
 
+## Power-up order (important)
+
+`GPIO0` drives `NRST`, but `GPIO0` is also the ESP's own **flash-mode strap** (low at
+boot = UART download mode). If the ESP and the STM32 come up together on the same
+3V3 rail, the STM32's reset circuit holds `NRST` low for a few ms - and the ESP may
+sample `GPIO0` low and never run the sketch (the symptom is a completely silent
+module: no AP, no serial output, yet esptool still talks to it).
+
+Two defences, use both:
+
+1. **Hardware**: one diode between them, anode on `NRST`, cathode on `GPIO0`, plus a
+   10k pull-up from `GPIO0` to 3V3. The ESP can then pull `NRST` low, but the STM32
+   can never drag `GPIO0` down.
+2. **Firmware** (`SELF_SYNC_STM32`): once the sketch runs it drives `BOOT0` low and
+   pulses `NRST`, so the STM32 re-samples a correct boot mode instead of sitting in
+   its system bootloader.
+
+If the reset pad cannot be identified, build with `manualReset` in mind: the flash
+flow can assert `BOOT0` only and let you press the board's reset button.
+
 ## Why did the join fail?
 
 The firmware remembers the last station attempt and reports it:

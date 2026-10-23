@@ -49,6 +49,15 @@
 #define CTRL_PORT        3333
 #define PIPE_PORT        3334
 #define PULSE_MS_DEFAULT 100
+
+/* ESP GPIO0 drives NRST but is ALSO the ESP's own flash-mode strap: at power-up the
+ * STM32 holds NRST low (its reset circuit), which can make the ESP sample GPIO0 low
+ * and boot into UART download mode - completely silent, no AP. Two defences:
+ *   1. hardware: put a diode between them (anode NRST, cathode GPIO0) + 10k pull-up
+ *      on GPIO0, so the STM32 can never drag GPIO0 down;
+ *   2. firmware: once we are running, drive BOOT0 low and pulse NRST so the STM32
+ *      re-samples a correct boot mode instead of sitting in the bootloader. */
+#define SELF_SYNC_STM32 1
 /* ---------------------------------------------------------------------- */
 
 struct WifiCreds {
@@ -323,6 +332,15 @@ void setup()
     if (ok) s_wifiSrc = "build";
   }
   if (!ok) startProvisioning();
+
+  /* Both chips may have powered up together, with the STM32 stuck in its bootloader
+   * because GPIO2 (BOOT0) was high while the ESP was booting. Put BOOT0 low and give
+   * the STM32 one clean reset so it starts the application. */
+#if SELF_SYNC_STM32
+  boot0Set(0);
+  delay(20);
+  nrstPulse(60);
+#endif
 
   ctrlServer.begin();
   ctrlServer.setNoDelay(true);
