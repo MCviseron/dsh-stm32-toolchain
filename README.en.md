@@ -172,6 +172,10 @@ Layout: `lib/runtime.mjs` (Node selection), `lib/core.mjs` (project/Keil/chip lo
 `lib/bridge.mjs` (state machine + HTTP/SSE + MCP), `lib/index.js` (DSH host half),
 `lib/client.js` (main-page panel).
 
+## Changelog
+
+[CHANGELOG.md](CHANGELOG.md) (Chinese).
+
 ## Licence
 
 MIT
