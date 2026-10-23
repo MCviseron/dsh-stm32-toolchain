@@ -6,6 +6,8 @@
 
 - CI：新增 `.github/workflows/publish.yml`（推 `v*` tag → 测试 → 校验 tag 与版本一致 → `npm publish --provenance`，OIDC 免令牌）与 `check.yml`（推 main / PR 跑语法与测试）。
 - 安装说明补充 `pnpm add dsh-stm32-toolchain`（npm 渠道），源码联接安装保留。
+- 新增 `scripts/check-dsh-version.mjs` 与 `docs/dsh-compat.md`：一条命令检查已安装的 DSH 版本、
+  更新源里的最新版本，以及 `dsh-mcp-client` 的声明范围是否覆盖它（退出码 0/2/3 供定时任务分流）。
 
 本文件记录项目的所有重要变更。格式参考
 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循
