@@ -1,5 +1,5 @@
 import { doctor, readProject, buildProject } from '../lib/core.mjs'
-import { cp, mkdir } from 'node:fs/promises'
+import { cp, mkdir, rm } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 
 const projects = [
@@ -67,4 +67,5 @@ if (existsSync(source)) {
   } else {
     console.log('copy has no Clock.uvprojx:', copy)
   }
+  await rm(copy, { recursive: true, force: true }).catch(() => undefined)
 }

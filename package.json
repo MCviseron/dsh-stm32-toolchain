@@ -56,7 +56,7 @@
     "linux"
   ],
   "scripts": {
-    "test": "node test/runtime.test.mjs && node test/settings.test.mjs && node test/client.test.mjs && node test/client-primitives.test.mjs && node test/jump.test.mjs && node test/vscode.test.mjs && node test/lease.test.mjs && node test/presentation.test.mjs && node test/paths.test.mjs && node test/no-project.test.mjs && node test/smoke.mjs && node test/wifi.test.mjs && node test/bridge.test.mjs",
+    "test": "node test/runtime.test.mjs && node test/settings.test.mjs && node test/client.test.mjs && node test/client-primitives.test.mjs && node test/jump.test.mjs && node test/vscode.test.mjs && node test/lease.test.mjs && node test/presentation.test.mjs && node test/paths.test.mjs && node test/no-project.test.mjs && node test/smoke.mjs && node test/wifi.test.mjs && node test/wifi-pipe.test.mjs && node test/bridge.test.mjs",
     "doctor": "node test/doctor.mjs"
   },
   "publishConfig": {

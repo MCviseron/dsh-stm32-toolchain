@@ -165,6 +165,20 @@ generated `.bin` (which contains the password in plain text) stays inside the gi
 Flashing the **STM32** over that link (`transport: wifi`) is the next step; until then the
 ESP halves are useful on their own for wiring and provisioning tests.
 
+### Transports
+
+| transport | path | needs |
+| --- | --- | --- |
+| `swd` | ST-Link via `UV4 -f` | a debugger wired to the board |
+| `uart` | AN3155 over a USB-TTL | BOOT0/NRST access, a COM port |
+| `wifi` | AN3155 through an ESP-01S | the ESP firmware, BOOT0/NRST wired to the ESP |
+
+Wi-Fi flashing reuses `lib/bootloader.mjs` unchanged: `lib/wifi.mjs` implements the
+same byte-pipe contract (`write` / `readByte` / `readExact` / `flush`) over two TCP
+sockets - 3333 control lines (BOOT0/NRST/BOOTLOADER/RUN) and 3334 raw UART. The
+ESP pulls BOOT0 high and pulses NRST before the handshake, and releases BOOT0 with
+a second reset after the last block.
+
 ## Tools
 
 | Tool | What it does |

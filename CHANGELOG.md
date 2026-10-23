@@ -45,6 +45,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (no credentials on a command line), then `flash-esp` writes that `.bin` to the ESP over
   USB-TTL. Exposed to the agent as `stm32_esp_firmware`.
 - The Wi-Fi password never leaves the bridge (`/state` reports `hasPass` only).
+### Added
+
+- **`transport: wifi`**: `lib/wifi.mjs` implements the AN3155 byte-pipe contract over the
+  ESP-01S bridge (3333 control, 3334 raw UART), so `flashImage` runs unchanged over
+  Wi-Fi: BOOTLOADER (BOOT0 high + reset) → handshake → blocks → RUN (BOOT0 low + reset).
+  The panel offers the transport and the log channel records every control round-trip.
+
 ### Changed
 
 - Settings apply immediately where possible: presentation goes through a
