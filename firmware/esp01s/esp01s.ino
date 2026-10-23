@@ -122,10 +122,12 @@ static void credsClear(void)
   EEPROM.commit();
 }
 
-static const char *activeSsid(void)
+/** Returns String: WiFi.SSID() is a temporary, so its c_str() must not outlive the call. */
+static String activeSsid(void)
 {
-  if (s_provisioning) return AP_SSID;
-  return (WiFi.SSID().length() > 0) ? WiFi.SSID().c_str() : "none";
+  if (s_provisioning) return String(AP_SSID);
+  String ssid = WiFi.SSID();
+  return ssid.length() > 0 ? ssid : String("none");
 }
 
 static String ipString(void)
@@ -167,7 +169,7 @@ static void ctrlPrintf(const char *fmt, ...)
 static void banner(void)
 {
   ctrlPrintf("+READY mode=%s src=%s ssid=%s ip=%s boot0=%d nrst=%d baud=%d pipe=%d\r\n",
-             s_provisioning ? "ap" : "sta", s_wifiSrc, activeSsid(), ipString().c_str(),
+             s_provisioning ? "ap" : "sta", s_wifiSrc, activeSsid().c_str(), ipString().c_str(),
              digitalRead(PIN_BOOT0), digitalRead(PIN_NRST), PIPE_BAUD, PIPE_PORT);
   if (s_provisioning && s_lastStaStatus != 0) {
     ctrlPrintf("+LASTSTA tried=%s status=%d %s\r\n", s_triedSsid, s_lastStaStatus, staReason(s_lastStaStatus));
@@ -295,7 +297,7 @@ static void handleCommand(String line)
   }
   if (line.equalsIgnoreCase("WIFI")) {
     ctrlPrintf("+WIFI mode=%s src=%s ssid=%s ip=%s rssi=%d haveSaved=%d tried=%s last=%d:%s\r\n",
-               s_provisioning ? "ap" : "sta", s_wifiSrc, activeSsid(), ipString().c_str(),
+               s_provisioning ? "ap" : "sta", s_wifiSrc, activeSsid().c_str(), ipString().c_str(),
                s_provisioning ? 0 : WiFi.RSSI(), credsValid() ? 1 : 0,
                s_triedSsid, s_lastStaStatus, staReason(s_lastStaStatus));
     return;
@@ -308,7 +310,7 @@ static void handleCommand(String line)
   }
   if (line.equalsIgnoreCase("STATUS")) {
     ctrlPrintf("+STATUS mode=%s src=%s ssid=%s ip=%s rssi=%d boot0=%d nrst=%d pipe=%s cmds=%lu rx=%lu tx=%lu up=%lu\r\n",
-               s_provisioning ? "ap" : "sta", s_wifiSrc, activeSsid(), ipString().c_str(),
+               s_provisioning ? "ap" : "sta", s_wifiSrc, activeSsid().c_str(), ipString().c_str(),
                s_provisioning ? 0 : WiFi.RSSI(),
                digitalRead(PIN_BOOT0), digitalRead(PIN_NRST),
                (pipeClient && pipeClient.connected()) ? "on" : "off",
