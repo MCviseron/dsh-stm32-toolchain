@@ -42,5 +42,5 @@ check('and as an agent tool', bridge.includes("stm32_esp_firmware"))
 
 const client = readFileSync(join(HERE, '..', 'lib', 'client.js'), 'utf8')
 check('the panel asks for both credentials',
-  client.includes('Wi-Fi 名称（烧进固件）') && client.includes('Wi-Fi 密码') && client.includes('type: "password"'))
+  client.includes('label: "Wi-Fi 名称"') && client.includes('Wi-Fi 密码') && client.includes('type: "password"'))
 check('with a generate and a flash button', client.includes('"生成固件"') && client.includes('"烧到 ESP"'))
