@@ -43,8 +43,20 @@
 #define AP_PASS          "stm32flash"
 #define STA_TIMEOUT_MS   15000
 
+/* Board selection. ESP-12E / NodeMCU is the recommended carrier: its own USB and
+ * 3.3 V regulator make it far more tolerant than a bare ESP-01S, and D1/D2 carry no
+ * boot strap, so driving the STM32 from them cannot put the ESP in flash mode. */
+#ifndef BOARD_NODEMCU
+#define BOARD_NODEMCU    1                /* 1 = ESP-12E/NodeMCU, 0 = ESP-01S */
+#endif
+
+#if BOARD_NODEMCU
+#define PIN_BOOT0        4                /* D2 -> STM32 BOOT0 */
+#define PIN_NRST         5                /* D1 -> STM32 NRST  */
+#else
 #define PIN_BOOT0        2                /* GPIO2 -> BOOT0 */
 #define PIN_NRST         0                /* GPIO0 -> NRST  */
+#endif
 #define PIPE_BAUD        115200
 #define CTRL_PORT        3333
 #define PIPE_PORT        3334
