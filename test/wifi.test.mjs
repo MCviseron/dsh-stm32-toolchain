@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { cString, credentialsHeader, firmwareToolchain, generateFirmware, flashEsp, FQBN, SKETCH_DIR } from '../lib/wifi-fw.mjs'
+import { cString, credentialsHeader, firmwareToolchain, generateFirmware, flashEsp, FQBN, SKETCH_DIR, BOARDS } from '../lib/wifi-fw.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 function check(name, condition, detail) {
@@ -18,9 +18,10 @@ check('the header warns against committing', credentialsHeader('a', 'b').include
 
 const toolchain = firmwareToolchain()
 check('the toolchain probe answers even without arduino-cli',
-  typeof toolchain.ok === 'boolean' && toolchain.fqbn === FQBN && typeof toolchain.core === 'string',
+  typeof toolchain.ok === 'boolean' && toolchain.fqbn === BOARDS.nodemcu.fqbn && typeof toolchain.core === 'string',
   JSON.stringify({ ok: toolchain.ok, core: toolchain.core }))
 check('the sketch lives next to the plugin', toolchain.sketch === SKETCH_DIR)
+check('every board has a compiling fqbn', Object.values(BOARDS).every((board) => typeof board.fqbn === 'string' && board.fqbn.includes(':')))
 
 const empty = await generateFirmware({})
 check('an empty SSID is refused before spawning a compiler', empty.ok === false && /名称/.test(empty.error), empty.error)

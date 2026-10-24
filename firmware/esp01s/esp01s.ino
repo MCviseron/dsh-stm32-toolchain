@@ -22,11 +22,16 @@
  * CTRL socket, so the pipe stays byte clean for AN3155.
  */
 
-#include <ESP8266WiFi.h>
-#include <ESP8266WebServer.h>
+#include <stdarg.h>
 #include <DNSServer.h>
 #include <EEPROM.h>
-#include <stdarg.h>
+#if defined(ESP32)
+  #include <WiFi.h>
+  #include <WebServer.h>
+#else
+  #include <ESP8266WiFi.h>
+  #include <ESP8266WebServer.h>
+#endif
 
 #if __has_include("wifi_creds.h")
 #include "wifi_creds.h"          /* written by the plugin: #define WIFI_SSID / WIFI_PASS */
@@ -50,12 +55,22 @@
 #define BOARD_NODEMCU    1                /* 1 = ESP-12E/NodeMCU, 0 = ESP-01S */
 #endif
 
-#if BOARD_NODEMCU
+#if defined(ESP32)
+/* ESP32 DevKit: UART2 talks to the STM32, UART0 stays free for USB debug.
+ * GPIO 25/26 carry no boot strap, so driving BOOT0/NRST cannot misfire. */
+#define PIN_BOOT0        25               /* -> STM32 BOOT0 */
+#define PIN_NRST         26               /* -> STM32 NRST  */
+#define PIN_STM_RX       16               /* GPIO16 = RX2  <- STM32 TX */
+#define PIN_STM_TX       17               /* GPIO17 = TX2  -> STM32 RX */
+#define STM              Serial2
+#elif BOARD_NODEMCU
 #define PIN_BOOT0        4                /* D2 -> STM32 BOOT0 */
 #define PIN_NRST         5                /* D1 -> STM32 NRST  */
+#define STM              Serial
 #else
 #define PIN_BOOT0        2                /* GPIO2 -> BOOT0 */
 #define PIN_NRST         0                /* GPIO0 -> NRST  */
+#define STM              Serial
 #endif
 /* 链路协议：由插件生成固件时写入 wifi_creds.h。stream = 透明管道（主机驱动 AN3155），
  * block = 块级 ACK，spool = 镜像缓存后 ESP 自烧。目前只有 stream 实现。 */
@@ -118,7 +133,11 @@ WiFiServer ctrlServer(CTRL_PORT);
 WiFiServer pipeServer(PIPE_PORT);
 WiFiClient ctrlClient;
 WiFiClient pipeClient;
+#if defined(ESP32)
+WebServer web(80);
+#else
 ESP8266WebServer web(80);
+#endif
 DNSServer dns;
 
 static uint32_t ctrlCount = 0;
@@ -365,9 +384,15 @@ static void handleCommand(String line)
 /* ------------------------------- main --------------------------------- */
 void setup()
 {
-  Serial.setRxBufferSize(1024);
-  Serial.begin(PIPE_BAUD);
-  Serial.setDebugOutput(false);
+#if defined(ESP32)
+  Serial2.setRxBufferSize(2048);
+  Serial2.begin(PIPE_BAUD, SERIAL_8N1, PIN_STM_RX, PIN_STM_TX);
+  Serial.begin(115200);                 /* USB debug only, never mixed with the pipe */
+#else
+  STM.setRxBufferSize(1024);
+  STM.begin(PIPE_BAUD);
+  STM.setDebugOutput(false);
+#endif
 
   pinMode(PIN_BOOT0, OUTPUT);
   pinMode(PIN_NRST, OUTPUT);
@@ -375,7 +400,11 @@ void setup()
   nrstSet(1);
 
   WiFi.persistent(false);
+#if defined(ESP32)
+  WiFi.setSleep(false);                 /* modem sleep stalls TCP sessions */
+#else
   WiFi.setSleepMode(WIFI_NONE_SLEEP);   /* modem sleep stalls TCP sessions on this chip */
+#endif
   credsLoad();
 
   bool ok = false;
@@ -421,8 +450,8 @@ static bool uartAck(uint32_t ms)
 {
   uint32_t deadline = millis() + ms;
   while ((int32_t)(millis() - deadline) < 0) {
-    if (Serial.available()) {
-      uint8_t b = (uint8_t)Serial.read();
+    if (STM.available()) {
+      uint8_t b = (uint8_t)STM.read();
       return b == 0x79;               /* ACK */
     }
     yield();
@@ -432,8 +461,8 @@ static bool uartAck(uint32_t ms)
 
 static void uartSend(const uint8_t *data, size_t n)
 {
-  Serial.write(data, n);
-  Serial.flush();
+  STM.write(data, n);
+  STM.flush();
 }
 
 static bool an3155Command(uint8_t cmd)
@@ -445,12 +474,12 @@ static bool an3155Command(uint8_t cmd)
 
 static bool an3155Resync()
 {
-  while (Serial.available()) Serial.read();
+  while (STM.available()) STM.read();
   uint8_t sync = 0x7F;
   uartSend(&sync, 1);
   uint32_t deadline = millis() + 500;
   while ((int32_t)(millis() - deadline) < 0) {
-    if (Serial.available()) { (void)Serial.read(); return true; }   /* ACK 或 NAK 都算同步态 */
+    if (STM.available()) { (void)STM.read(); return true; }   /* ACK 或 NAK 都算同步态 */
     yield();
   }
   return false;
@@ -528,7 +557,7 @@ void loop()
     if (fresh) {
       pipeClient = fresh;
       pipeClient.setNoDelay(true);
-      while (Serial.available()) Serial.read();
+      while (STM.available()) STM.read();
     }
   }
 
@@ -555,7 +584,7 @@ void loop()
         if (s_lineLen < sizeof s_line - 1) s_line[s_lineLen++] = (char)ch;
         /* 只有 "#B" 才是命令：AN3155 的普通字节里 0x23 也可能是数据，不能误吞 */
         if (s_lineLen == 2 && !(s_line[0] == '#' && s_line[1] == 'B')) {
-          Serial.write((const uint8_t *)s_line, s_lineLen);
+          STM.write((const uint8_t *)s_line, s_lineLen);
           pipeBytesDown += s_lineLen;
           s_lineLen = 0;
           continue;
@@ -575,19 +604,19 @@ void loop()
         }
         continue;
       }
-      Serial.write(ch);
+      STM.write(ch);
       pipeBytesDown += 1;
     }
 #else
     while (pipeClient.available() && n < sizeof(buf)) buf[n++] = (uint8_t)pipeClient.read();
     if (n > 0) {
-      Serial.write(buf, n);
-      Serial.flush();
+      STM.write(buf, n);
+      STM.flush();
       pipeBytesDown += n;
     }
 #endif
     n = 0;
-    while (Serial.available() && n < sizeof(buf)) buf[n++] = (uint8_t)Serial.read();
+    while (STM.available() && n < sizeof(buf)) buf[n++] = (uint8_t)STM.read();
     if (n > 0) {
       pipeClient.write(buf, n);
       pipeBytesUp += n;
