@@ -24,6 +24,12 @@ check('a relayed message is marked with its origin',
   readFileSync(join(root, 'lib/index.js'), 'utf8').includes('text.startsWith(PANEL_PREFIX)'))
 check('sending follows the message into that session',
   client.includes('jumpToBoundSession(); }, 60);'))
+check('the link mode is selectable and honest about what exists',
+  client.includes('"链路模式"') && bridge.includes("case 'set-link-mode'") &&
+  bridge.includes('尚未实现：先切回') && fsRead(join(root, 'lib/wifi-fw.mjs')).includes('LINK_MODES'))
+check('the chosen link mode is baked into the firmware',
+  fsRead(join(root, 'lib/wifi-fw.mjs')).includes("'#define LINK_MODE ' + mode.define") &&
+  bridge.includes('linkMode: settings.linkMode'))
 check('the lease card reads the field the bridge actually sends',
   client.includes("Number(lease.expiresInSeconds)") && !client.includes("lease.expiresAt || 0"))
 check('the wireless monitor finds the ESP itself and says so',

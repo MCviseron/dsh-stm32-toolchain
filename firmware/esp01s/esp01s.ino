@@ -57,6 +57,22 @@
 #define PIN_BOOT0        2                /* GPIO2 -> BOOT0 */
 #define PIN_NRST         0                /* GPIO0 -> NRST  */
 #endif
+/* 链路协议：由插件生成固件时写入 wifi_creds.h。stream = 透明管道（主机驱动 AN3155），
+ * block = 块级 ACK，spool = 镜像缓存后 ESP 自烧。目前只有 stream 实现。 */
+#define LINK_MODE_STREAM 1
+#define LINK_MODE_BLOCK  2
+#define LINK_MODE_SPOOL  3
+#ifndef LINK_MODE
+#define LINK_MODE LINK_MODE_STREAM
+#endif
+#if LINK_MODE == LINK_MODE_BLOCK
+#define LINK_NAME "block"
+#elif LINK_MODE == LINK_MODE_SPOOL
+#define LINK_NAME "spool"
+#else
+#define LINK_NAME "stream"
+#endif
+
 #ifndef PIPE_BAUD
 #define PIPE_BAUD        115200       /* 生成固件时由插件写入（wifi_creds.h）；也可 -D 覆盖 */
 #endif
@@ -185,9 +201,9 @@ static void ctrlPrintf(const char *fmt, ...)
 
 static void banner(void)
 {
-  ctrlPrintf("+READY mode=%s src=%s ssid=%s ip=%s boot0=%d nrst=%d baud=%d pipe=%d\r\n",
+  ctrlPrintf("+READY mode=%s src=%s ssid=%s ip=%s boot0=%d nrst=%d baud=%d pipe=%d link=%s\r\n",
              s_provisioning ? "ap" : "sta", s_wifiSrc, activeSsid().c_str(), ipString().c_str(),
-             digitalRead(PIN_BOOT0), digitalRead(PIN_NRST), PIPE_BAUD, PIPE_PORT);
+             digitalRead(PIN_BOOT0), digitalRead(PIN_NRST), PIPE_BAUD, PIPE_PORT, LINK_NAME);
   if (s_provisioning && s_lastStaStatus != 0) {
     ctrlPrintf("+LASTSTA tried=%s status=%d %s\r\n", s_triedSsid, s_lastStaStatus, staReason(s_lastStaStatus));
   }
@@ -329,13 +345,13 @@ static void handleCommand(String line)
     ESP.restart();
   }
   if (line.equalsIgnoreCase("STATUS")) {
-    ctrlPrintf("+STATUS mode=%s src=%s ssid=%s ip=%s rssi=%d boot0=%d nrst=%d pipe=%s cmds=%lu rx=%lu tx=%lu up=%lu\r\n",
+    ctrlPrintf("+STATUS mode=%s src=%s ssid=%s ip=%s rssi=%d boot0=%d nrst=%d pipe=%s cmds=%lu rx=%lu tx=%lu up=%lu link=%s\r\n",
                s_provisioning ? "ap" : "sta", s_wifiSrc, activeSsid().c_str(), ipString().c_str(),
                s_provisioning ? 0 : WiFi.RSSI(),
                digitalRead(PIN_BOOT0), digitalRead(PIN_NRST),
                (pipeClient && pipeClient.connected()) ? "on" : "off",
                (unsigned long)ctrlCount, (unsigned long)pipeBytesDown,
-               (unsigned long)pipeBytesUp, (unsigned long)(millis() / 1000));
+               (unsigned long)pipeBytesUp, (unsigned long)(millis() / 1000), LINK_NAME);
     return;
   }
   if (line.equalsIgnoreCase("REBOOT")) {
