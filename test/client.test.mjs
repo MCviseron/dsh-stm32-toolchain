@@ -55,7 +55,7 @@ const tree = panel.component()
 const flat = JSON.stringify(tree)
 check('panel renders without throwing', typeof tree === 'object' && tree !== null)
 check('panel shows the title', flat.includes('STM32'), flat.slice(0, 80))
-check('panel shows the action bar', flat.includes('一键编译'), '')
+check('panel shows the action bar', flat.includes('一键下载'), '')
 check('panel shows the stat cards', flat.includes('芯片') && flat.includes('固件') && flat.includes('烧录'))
 
 function countGrids(node, depth = 0) {
