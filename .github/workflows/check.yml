@@ -29,6 +29,8 @@ jobs:
           node --check lib/client.js
       - name: Tests
         shell: bash
+        env:
+          DSH_STM32_CI: '1'
         run: |
           set -o pipefail
           pnpm test 2>&1 | tee "$RUNNER_TEMP/tests.log" || {
@@ -40,5 +42,6 @@ jobs:
         if: always()
         shell: bash
         run: |
-          pnpm pack --pack-destination "$RUNNER_TEMP" >/dev/null
-          tar -tzf "$RUNNER_TEMP"/*.tgz | sort
+          pnpm pack >/dev/null
+          tar -tzf ./*.tgz | sort
+          rm -f ./*.tgz
