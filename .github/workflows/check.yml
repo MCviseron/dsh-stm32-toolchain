@@ -1,5 +1,7 @@
 name: check
 
+# The toolchain is Windows-first (UV4.exe, CubeMX, COM ports, D:\ drive layouts), so the
+# suite is verified where it actually runs instead of on Linux where half of it is moot.
 on:
   push:
     branches: [main]
@@ -11,7 +13,7 @@ permissions:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -29,13 +31,14 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          pnpm test 2>&1 | tee /tmp/tests.log || {
-            echo "::error::$(grep -E '^(FAIL|not ok)|Error:|AssertionError' /tmp/tests.log | head -5 | tr '\n' ' ' | cut -c1-1500)"
-            echo "::error::$(tail -20 /tmp/tests.log | tr '\n' ' ' | cut -c1-1500)"
+          pnpm test 2>&1 | tee "$RUNNER_TEMP/tests.log" || {
+            echo "::error::$(grep -E '^(FAIL|not ok)|Error:|AssertionError' "$RUNNER_TEMP/tests.log" | head -5 | tr '\n' ' ' | cut -c1-1500)"
+            echo "::error::$(tail -20 "$RUNNER_TEMP/tests.log" | tr '\n' ' ' | cut -c1-1500)"
             exit 1
           }
       - name: Package contents
         if: always()
+        shell: bash
         run: |
-          pnpm pack --pack-destination /tmp >/dev/null
-          tar -tzf /tmp/*.tgz | sort
+          pnpm pack --pack-destination "$RUNNER_TEMP" >/dev/null
+          tar -tzf "$RUNNER_TEMP"/*.tgz | sort
