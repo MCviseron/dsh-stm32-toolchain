@@ -42,7 +42,14 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Tests
-        run: pnpm test
+        shell: bash
+        run: |
+          set -o pipefail
+          pnpm test 2>&1 | tee /tmp/tests.log || {
+            echo "::error::$(grep -E '^(FAIL|not ok)|Error:|AssertionError' /tmp/tests.log | head -5 | tr '\n' ' ' | cut -c1-1500)"
+            echo "::error::$(tail -20 /tmp/tests.log | tr '\n' ' ' | cut -c1-1500)"
+            exit 1
+          }
 
       - name: Tag matches package.json
         if: startsWith(github.ref, 'refs/tags/')
