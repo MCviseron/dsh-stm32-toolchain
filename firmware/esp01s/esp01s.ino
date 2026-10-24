@@ -69,6 +69,7 @@
 #define PIN_BOOT0        4                /* D2 -> STM32 BOOT0 */
 #define PIN_NRST         5                /* D1 -> STM32 NRST  */
 #define STM              Serial
+#define DBG(...)         do { } while (0)
 #else
 #define PIN_BOOT0        2                /* GPIO2 -> BOOT0 */
 #define PIN_NRST         0                /* GPIO0 -> NRST  */
@@ -441,19 +442,7 @@ void setup()
   pipeServer.setNoDelay(true);
 }
 
-#if LINK_MODE == LINK_MODE_BLOCK
-/* ── 块级 ACK ────────────────────────────────────────────────────────────────
- * 主机在 3334 上发 "#B <addr-hex> <len>\n" + len 字节，ESP 自己做 AN3155 的
- * 三段握手（命令 / 地址 / 数据），失败就重新同步并重试，最后回一行
- * "+B ok <tries>" 或 "+B err <tries>"。这样一块只占一次 TCP 往返。
- * ────────────────────────────────────────────────────────────────────────── */
-static uint8_t  s_blk[256];
-static uint32_t s_blkAddr = 0;
-static uint32_t s_blkNeed = 0;
-static uint32_t s_blkLen  = 0;
-static char     s_line[24];
-static uint8_t  s_lineLen = 0;
-
+#if LINK_MODE == LINK_MODE_BLOCK || LINK_MODE == LINK_MODE_SPOOL
 static bool uartAck(uint32_t ms)
 {
   uint32_t deadline = millis() + ms;
@@ -492,6 +481,22 @@ static bool an3155Resync()
   }
   return false;
 }
+
+#endif
+
+#if LINK_MODE == LINK_MODE_BLOCK
+/* ── 块级 ACK：主机 "#B <addr> <len>" + 负载，ESP 自己做三段握手并重试 ── */
+/* ── 块级 ACK ────────────────────────────────────────────────────────────────
+ * 主机在 3334 上发 "#B <addr-hex> <len>\n" + len 字节，ESP 自己做 AN3155 的
+ * 三段握手（命令 / 地址 / 数据），失败就重新同步并重试，最后回一行
+ * "+B ok <tries>" 或 "+B err <tries>"。这样一块只占一次 TCP 往返。
+ * ────────────────────────────────────────────────────────────────────────── */
+static uint8_t  s_blk[256];
+static uint32_t s_blkAddr = 0;
+static uint32_t s_blkNeed = 0;
+static uint32_t s_blkLen  = 0;
+static char     s_line[24];
+static uint8_t  s_lineLen = 0;
 
 static bool an3155WriteBlock()
 {
@@ -538,6 +543,210 @@ static void finishBlock(WiFiClient &client)
 #endif
 
 
+#if LINK_MODE == LINK_MODE_SPOOL
+/* ── 全量缓存 ────────────────────────────────────────────────────────────────
+ * 主机先把镜像塞进 ESP 的文件系统，ESP 再自己跑 AN3155（复位 → 同步 → 擦除
+ * → 写 → GO）。这样 Wi-Fi 抖动完全不在烧录时序里，断网也烧不到一半。
+ *
+ *   #I <bytes>                       开始接收   -> +I ok <bytes> | +I err ...
+ *   #S <offset> <len> + len 字节      写入片段   -> +S ok <end>    | +S err ...
+ *   #F <base> <eraseCmd> <n> <s0,..> 开始烧录   -> +F <stage> ...  -> +F ok <ms>
+ *   #Q                               查询状态   -> +Q <state> <bytes>
+ *   #A                               放弃       -> +A ok
+ * ────────────────────────────────────────────────────────────────────────── */
+#include <LittleFS.h>
+
+static const char *SPOOL_PATH = "/stm32.bin";
+static uint32_t s_spoolTotal = 0;
+static uint32_t s_spoolHave  = 0;
+static const char *s_spoolState = "idle";
+static char     s_spoolLine[64];
+static uint8_t  s_spoolLineLen = 0;
+static uint32_t s_pendOff = 0;
+static uint32_t s_pendNeed = 0;
+static uint32_t s_pendLen = 0;
+static uint8_t  s_spoolBuf[256];
+
+static void spoolReply(WiFiClient &client, const char *fmt, ...)
+{
+  char buf[96];
+  va_list ap;
+  va_start(ap, fmt);
+  vsnprintf(buf, sizeof buf, fmt, ap);
+  va_end(ap);
+  client.write((const uint8_t *)buf, strlen(buf));
+}
+
+static bool spoolFileOpen(uint32_t bytes)
+{
+  LittleFS.remove(SPOOL_PATH);
+  File f = LittleFS.open(SPOOL_PATH, "w");
+  if (!f) return false;
+  f.close();
+  s_spoolTotal = bytes;
+  s_spoolHave  = 0;
+  return true;
+}
+
+static bool spoolStore(uint32_t offset, const uint8_t *data, uint32_t len)
+{
+  File f = LittleFS.open(SPOOL_PATH, "r+");
+  if (!f) return false;
+  if (!f.seek(offset)) { f.close(); return false; }
+  size_t written = f.write(data, len);
+  f.close();
+  if (written != len) return false;
+  if (offset + len > s_spoolHave) s_spoolHave = offset + len;
+  return true;
+}
+
+static bool an3155Sync(uint8_t tries)
+{
+  for (uint8_t i = 0; i < tries; i++) {
+    while (STM.available()) STM.read();
+    uint8_t sync = 0x7F;
+    uartSend(&sync, 1);
+    uint32_t deadline = millis() + 300;
+    while ((int32_t)(millis() - deadline) < 0) {
+      if (STM.available()) { (void)STM.read(); return true; }
+      yield();
+    }
+  }
+  return false;
+}
+
+static bool an3155Erase(uint8_t eraseCmd, uint8_t count, const uint8_t *lo, const uint8_t *hi)
+{
+  uint8_t pair[2] = { eraseCmd, (uint8_t)(eraseCmd ^ 0xFF) };
+  uartSend(pair, 2);
+  if (!uartAck(2000)) return false;
+
+  uint8_t frame[1 + 2 * 32 + 1];
+  uint32_t p = 0;
+  uint8_t sum = 0;
+  uint8_t n = (count == 0) ? 0 : (uint8_t)(count - 1);        /* AN3155: N = 个数-1 */
+  if (eraseCmd == 0x44) {
+    frame[p++] = 0x00; sum ^= 0x00;
+    frame[p++] = n;    sum ^= n;
+    for (uint8_t i = 0; i < count; i++) {
+      frame[p++] = 0x00; sum ^= 0x00;
+      frame[p++] = lo[i]; sum ^= lo[i];
+    }
+  } else {
+    frame[p++] = n;    sum ^= n;
+    for (uint8_t i = 0; i < count; i++) { frame[p++] = hi[i]; sum ^= hi[i]; }
+  }
+  frame[p++] = sum;
+  uartSend(frame, p);
+  return uartAck(45000);                                       /* 擦除可能很慢 */
+}
+
+static bool an3155WriteAt(uint32_t addr, const uint8_t *data, uint32_t len)
+{
+  if (!an3155Command(0x31)) return false;
+  uint8_t head[5];
+  head[0] = (uint8_t)(addr >> 24); head[1] = (uint8_t)(addr >> 16);
+  head[2] = (uint8_t)(addr >> 8);  head[3] = (uint8_t)addr;
+  head[4] = (uint8_t)(head[0] ^ head[1] ^ head[2] ^ head[3]);
+  uartSend(head, 5);
+  if (!uartAck(900)) return false;
+
+  uint32_t padded = (len + 3u) & ~3u;
+  static uint8_t frame[2 + 256];
+  frame[0] = (uint8_t)(len - 1u);
+  uint8_t sum = frame[0];
+  for (uint32_t i = 0; i < padded; i++) {
+    uint8_t b = (i < len) ? data[i] : 0xFF;
+    frame[1 + i] = b;
+    sum ^= b;
+  }
+  frame[1 + padded] = sum;
+  uartSend(frame, padded + 2u);
+  return uartAck(1500);
+}
+
+static bool an3155Go(uint32_t addr)
+{
+  if (!an3155Command(0x21)) return false;
+  uint8_t head[5];
+  head[0] = (uint8_t)(addr >> 24); head[1] = (uint8_t)(addr >> 16);
+  head[2] = (uint8_t)(addr >> 8);  head[3] = (uint8_t)addr;
+  head[4] = (uint8_t)(head[0] ^ head[1] ^ head[2] ^ head[3]);
+  uartSend(head, 5);
+  return uartAck(2000);
+}
+
+static bool spoolRunFlash(WiFiClient &client, uint32_t base, uint8_t eraseCmd,
+                          uint8_t count, const uint8_t *lo, const uint8_t *hi)
+{
+  s_spoolState = "flashing";
+  spoolReply(client, "+F reset\r\n");
+  boot0Set(1);
+  delay(BOOT_SETTLE_MS);
+  nrstPulse(RESET_PULSE_MS);
+  delay(BOOT_POST_MS);
+
+  if (!an3155Sync(40)) {
+    spoolReply(client, "+F err nosync\r\n");
+    s_spoolState = "error";
+    boot0Set(0);
+    return false;
+  }
+  spoolReply(client, "+F sync ok\r\n");
+
+  if (!an3155Erase(eraseCmd, count, lo, hi)) {
+    spoolReply(client, "+F err erase\r\n");
+    s_spoolState = "error";
+    boot0Set(0);
+    return false;
+  }
+  spoolReply(client, "+F erase ok\r\n");
+
+  File f = LittleFS.open(SPOOL_PATH, "r");
+  if (!f) {
+    spoolReply(client, "+F err nofile\r\n");
+    s_spoolState = "error";
+    boot0Set(0);
+    return false;
+  }
+
+  static uint8_t blk[256];
+  uint32_t total = s_spoolHave;
+  uint32_t done = 0;
+  uint32_t t0 = millis();
+  while (done < total) {
+    size_t n = f.read(blk, sizeof blk);
+    if (!n) break;
+    bool ok = false;
+    for (uint8_t tries = 0; tries < 4 && !ok; tries++) {
+      ok = an3155WriteAt(base + done, blk, (uint32_t)n);
+      if (!ok) { an3155Resync(); (void)an3155Sync(6); }
+    }
+    if (!ok) {
+      f.close();
+      spoolReply(client, "+F err write 0x%lx\r\n", (unsigned long)(base + done));
+      s_spoolState = "error";
+      boot0Set(0);
+      return false;
+    }
+    done += (uint32_t)n;
+    if ((done % 4096u) == 0u || done >= total) {
+      spoolReply(client, "+F write %lu %lu\r\n", (unsigned long)done, (unsigned long)total);
+    }
+    yield();
+  }
+  f.close();
+
+  (void)an3155Go(base);                       /* 失败也无所谓：复位后照样运行 */
+  boot0Set(0);
+  nrstPulse(RESET_PULSE_MS);
+  spoolReply(client, "+F ok %lu\r\n", (unsigned long)(millis() - t0));
+  s_spoolState = "done";
+  return true;
+}
+#endif
+
+
 void loop()
 {
   if (s_provisioning) {
@@ -579,7 +788,82 @@ void loop()
   if (pipeClient && pipeClient.connected()) {
     uint8_t buf[128];
     size_t n = 0;
-#if LINK_MODE == LINK_MODE_BLOCK
+#if LINK_MODE == LINK_MODE_SPOOL
+    while (pipeClient.available()) {
+      uint8_t ch = (uint8_t)pipeClient.read();
+      if (s_pendNeed) {                        /* "#S" 的负载：攒够再落盘 */
+        if (s_pendLen < sizeof s_spoolBuf) s_spoolBuf[s_pendLen++] = ch;
+        if (s_pendLen >= s_pendNeed) {
+          bool ok = spoolStore(s_pendOff, s_spoolBuf, s_pendLen);
+          if (ok) spoolReply(pipeClient, "+S ok %lu\r\n", (unsigned long)(s_pendOff + s_pendLen));
+          else spoolReply(pipeClient, "+S err disk\r\n");
+          s_pendNeed = 0;
+          s_pendLen = 0;
+        }
+        continue;
+      }
+      if (s_spoolLineLen || ch == '#') {
+        if (s_spoolLineLen < sizeof s_spoolLine - 1) s_spoolLine[s_spoolLineLen++] = (char)ch;
+        if (ch == '\n') {
+          s_spoolLine[s_spoolLineLen] = 0;
+          unsigned long a = 0, b = 0, c = 0;
+          if (s_spoolLine[1] == 'I') {
+            if (sscanf(s_spoolLine, "#I %lu", &a) == 1 && a > 0 && spoolFileOpen((uint32_t)a)) {
+              spoolReply(pipeClient, "+I ok %lu\r\n", a);
+              s_spoolState = "uploading";
+            } else {
+              spoolReply(pipeClient, "+I err\r\n");
+            }
+          } else if (s_spoolLine[1] == 'S') {
+            if (sscanf(s_spoolLine, "#S %lx %lu", &a, &b) == 2 && b > 0 && b <= sizeof s_spoolBuf &&
+                s_spoolTotal > 0 && a + b <= s_spoolTotal) {
+              s_pendOff = (uint32_t)a;
+              s_pendNeed = (uint32_t)b;
+              s_pendLen = 0;
+            } else {
+              spoolReply(pipeClient, "+S err frame\r\n");
+            }
+          } else if (s_spoolLine[1] == 'F') {
+            /* #F <base> <eraseCmd> <n> <s0,s1,...> */
+            char list[80] = "";
+            unsigned long cmd = 0, cnt = 0;
+            if (sscanf(s_spoolLine, "#F %lx %lx %lu %79s", &a, &cmd, &cnt, list) >= 3 &&
+                cnt >= 1 && cnt <= 32) {
+              uint8_t lo[32], hi[32];
+              char *tok = strtok(list, ",");
+              uint8_t i = 0;
+              while (tok && i < cnt) {
+                unsigned long v = strtoul(tok, 0, 10);
+                lo[i] = (uint8_t)(v & 0xFF);
+                hi[i] = (uint8_t)(v & 0xFF);
+                i++;
+                tok = strtok(0, ",");
+              }
+              if (i == cnt) {
+                spoolRunFlash(pipeClient, (uint32_t)a, (uint8_t)cmd, (uint8_t)cnt, lo, hi);
+              } else {
+                spoolReply(pipeClient, "+F err sectors\r\n");
+              }
+            } else {
+              spoolReply(pipeClient, "+F err frame\r\n");
+            }
+          } else if (s_spoolLine[1] == 'Q') {
+            spoolReply(pipeClient, "+Q %s %lu\r\n", s_spoolState, (unsigned long)s_spoolHave);
+          } else if (s_spoolLine[1] == 'A') {
+            s_pendNeed = 0; s_pendLen = 0; s_spoolHave = 0; s_spoolTotal = 0;
+            s_spoolState = "idle";
+            spoolReply(pipeClient, "+A ok\r\n");
+          } else {
+            spoolReply(pipeClient, "+E bad\r\n");
+          }
+          s_spoolLineLen = 0;
+        }
+        continue;
+      }
+      STM.write(ch);                           /* 非命令字节照旧透传 */
+      pipeBytesDown += 1;
+    }
+#elif LINK_MODE == LINK_MODE_BLOCK
     /* 块级 ACK：二进制负载按 "#B" 声明的长度直接吞下，不会把负载里的 '#' 当命令 */
     while (pipeClient.available()) {
       uint8_t ch = (uint8_t)pipeClient.read();
