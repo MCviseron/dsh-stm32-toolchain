@@ -1,3 +1,12 @@
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
+
+/* 需要一个本地工程副本和 Keil 才能驱动真实构建；在没有这些前提的机器（CI）上跳过，而不是把环境缺失当成失败。 */
+const SKIP_FIXTURES = !existsSync(join(process.cwd(), '.tmp', 'code-copy', 'Clock.uvprojx'))
+if (process.env.DSH_STM32_CI === '1' || SKIP_FIXTURES) {
+  console.log('SKIP ' + 'bridge.test.mjs' + ' :: 需要一个本地工程副本和 Keil 才能驱动真实构建')
+  process.exit(0)
+}
 import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'

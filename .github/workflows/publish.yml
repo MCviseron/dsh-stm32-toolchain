@@ -43,6 +43,8 @@ jobs:
 
       - name: Tests
         shell: bash
+        env:
+          DSH_STM32_CI: '1'
         run: |
           set -o pipefail
           pnpm test 2>&1 | tee "$RUNNER_TEMP/tests.log" || {
@@ -65,7 +67,10 @@ jobs:
 
       - name: Pack (what would ship)
         shell: bash
-        run: pnpm pack --pack-destination "$RUNNER_TEMP" && tar -tzf "$RUNNER_TEMP"/*.tgz | sort
+        shell: bash
+        run: |
+          pnpm pack
+          tar -tzf ./*.tgz | sort
 
       - name: Publish
         if: startsWith(github.ref, 'refs/tags/') && (github.event_name != 'workflow_dispatch' || inputs.dry_run == false)
