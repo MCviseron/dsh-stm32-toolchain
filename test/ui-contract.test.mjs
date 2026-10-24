@@ -19,6 +19,8 @@ check('serial writes are echoed to the 串口 channel', /log\('serial', '→ '\s
 check('the echo can be switched off', bridge.includes("'set-serial-echo'") && bridge.includes('settings.serialEcho !== false'))
 check('the echo is logged only after a successful write',
   bridge.indexOf("→ ' + text") > bridge.indexOf("await monitor.pipe.write") && bridge.includes('→ 发送失败：'))
+check('the lease card reads the field the bridge actually sends',
+  client.includes("Number(lease.expiresInSeconds)") && !client.includes("lease.expiresAt || 0"))
 check('the wireless monitor finds the ESP itself and says so',
   bridge.includes('无线串口：自动探测到 ESP') && bridge.includes('无线串口打不开：'))
 check('the wireless monitor decodes bytes as utf8', bridge.includes("line.toString('utf8')") && bridge.includes('monitor.pending = Buffer.concat'))
