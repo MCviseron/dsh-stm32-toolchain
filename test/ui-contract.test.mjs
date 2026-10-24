@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
+const fsRead = (path) => readFileSync(path, 'utf8')
 const bridge = readFileSync(join(root, 'lib/bridge.mjs'), 'utf8')
 const client = readFileSync(join(root, 'lib/client.js'), 'utf8')
 const entry = readFileSync(join(root, 'lib/index.js'), 'utf8')
@@ -16,6 +17,10 @@ function check(name, condition, detail) {
  * nothing (CRLF) or a component that dropped its children. Assert the real markers. */
 check('serial writes are echoed to the 串口 channel', /log\('serial', '→ '\s*\+/.test(bridge))
 check('the echo can be switched off', bridge.includes("'set-serial-echo'") && bridge.includes('settings.serialEcho !== false'))
+check('the echo is logged only after a successful write',
+  bridge.indexOf("→ ' + text") > bridge.indexOf("await monitor.pipe.write") && bridge.includes('→ 发送失败：'))
+check('a dropped wireless pipe closes the monitor',
+  bridge.includes('无线串口已断开') && fsRead(join(root, 'lib/wifi.mjs')).includes('data.destroyed'))
 check('the panel offers the 显示发送 toggle', client.includes('显示发送') && client.includes('set-serial-echo'))
 
 check('the CubeMX actions are in the toolbar',
