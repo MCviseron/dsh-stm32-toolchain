@@ -19,6 +19,11 @@ check('serial writes are echoed to the 串口 channel', /log\('serial', '→ '\s
 check('the echo can be switched off', bridge.includes("'set-serial-echo'") && bridge.includes('settings.serialEcho !== false'))
 check('the echo is logged only after a successful write',
   bridge.indexOf("→ ' + text") > bridge.indexOf("await monitor.pipe.write") && bridge.includes('→ 发送失败：'))
+check('a relayed message is marked with its origin',
+  readFileSync(join(root, 'lib/index.js'), 'utf8').includes("PANEL_PREFIX = '[来自stm32总管]'") &&
+  readFileSync(join(root, 'lib/index.js'), 'utf8').includes('text.startsWith(PANEL_PREFIX)'))
+check('sending follows the message into that session',
+  client.includes('jumpToBoundSession(); }, 60);'))
 check('the lease card reads the field the bridge actually sends',
   client.includes("Number(lease.expiresInSeconds)") && !client.includes("lease.expiresAt || 0"))
 check('the wireless monitor finds the ESP itself and says so',
