@@ -26,9 +26,9 @@ check('the .ioc is remembered per project', bridge.includes('iocByProject'))
 
 check('Card renders its children', /props\.children \|\| null/.test(client))
 check('the monitor baud can be auto-detected or picked',
-  client.includes('"串口波特率"') && client.includes('label: "自动检测"') && client.includes('BAUD_CHOICES'))
+  client.includes('"串口监视波特率"') && client.includes('label: "自动检测"') && client.includes('BAUD_CHOICES'))
 check('the ESP flashing baud has its own picker',
-  client.includes('"ESP 烧录波特率"') && client.includes('set-esp-baud') && bridge.includes("case 'set-esp-baud'"))
+  client.includes('"ESP 串口速率（烧录/无线串口）"') && client.includes('set-esp-baud') && bridge.includes("case 'set-esp-baud'"))
 check('the bridge bakes the chosen baud into the firmware', bridge.includes('baud: settings.espBaud'))
 check('a slow pipe baud is offered', String(readFileSync(join(root, 'lib/wifi-fw.mjs'), 'utf8')).includes('PIPE_BAUDS'))
 check('the quick-start dialog exists', client.includes('快速上手') && client.includes('showHelp ? h("div"'))
