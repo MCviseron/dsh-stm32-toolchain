@@ -77,10 +77,14 @@ jobs:
         # No NODE_AUTH_TOKEN on purpose: an empty token breaks OIDC. The npm CLI uses
         # the GitHub OIDC token together with the trusted publisher configured on npmjs.com.
         run: |
+          VER=$(node -p "require('./package.json').version")
+          if npm view "dsh-stm32-toolchain@$VER" version --registry=https://registry.npmjs.org >/dev/null 2>&1; then
+            echo "$VER is already on npm - nothing to publish (re-running a tag must not fail)."
+            exit 0
+          fi
           npm publish --access public --provenance --registry=https://registry.npmjs.org --json | tee "$RUNNER_TEMP/publish.json"
           echo "--- registry check ---"
-          for i in 1 2 3 4 5; do
-            VER=$(node -p "require('./package.json').version")
+          for i in 1 2 3 4 5 6 7 8; do
             SEEN=$(npm view "dsh-stm32-toolchain@$VER" version --registry=https://registry.npmjs.org 2>/dev/null || true)
             echo "attempt $i: $SEEN"
             if [ -n "$SEEN" ]; then exit 0; fi
