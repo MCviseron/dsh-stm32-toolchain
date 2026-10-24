@@ -404,6 +404,103 @@ void setup()
   pipeServer.setNoDelay(true);
 }
 
+#if LINK_MODE == LINK_MODE_BLOCK
+/* ── 块级 ACK ────────────────────────────────────────────────────────────────
+ * 主机在 3334 上发 "#B <addr-hex> <len>\n" + len 字节，ESP 自己做 AN3155 的
+ * 三段握手（命令 / 地址 / 数据），失败就重新同步并重试，最后回一行
+ * "+B ok <tries>" 或 "+B err <tries>"。这样一块只占一次 TCP 往返。
+ * ────────────────────────────────────────────────────────────────────────── */
+static uint8_t  s_blk[256];
+static uint32_t s_blkAddr = 0;
+static uint32_t s_blkNeed = 0;
+static uint32_t s_blkLen  = 0;
+static char     s_line[24];
+static uint8_t  s_lineLen = 0;
+
+static bool uartAck(uint32_t ms)
+{
+  uint32_t deadline = millis() + ms;
+  while ((int32_t)(millis() - deadline) < 0) {
+    if (Serial.available()) {
+      uint8_t b = (uint8_t)Serial.read();
+      return b == 0x79;               /* ACK */
+    }
+    yield();
+  }
+  return false;
+}
+
+static void uartSend(const uint8_t *data, size_t n)
+{
+  Serial.write(data, n);
+  Serial.flush();
+}
+
+static bool an3155Command(uint8_t cmd)
+{
+  uint8_t pair[2] = { cmd, (uint8_t)(cmd ^ 0xFF) };
+  uartSend(pair, 2);
+  return uartAck(700);
+}
+
+static bool an3155Resync()
+{
+  while (Serial.available()) Serial.read();
+  uint8_t sync = 0x7F;
+  uartSend(&sync, 1);
+  uint32_t deadline = millis() + 500;
+  while ((int32_t)(millis() - deadline) < 0) {
+    if (Serial.available()) { (void)Serial.read(); return true; }   /* ACK 或 NAK 都算同步态 */
+    yield();
+  }
+  return false;
+}
+
+static bool an3155WriteBlock()
+{
+  uint32_t len = s_blkLen;
+  if (!an3155Command(0x31)) return false;
+
+  uint8_t head[5];
+  head[0] = (uint8_t)(s_blkAddr >> 24);
+  head[1] = (uint8_t)(s_blkAddr >> 16);
+  head[2] = (uint8_t)(s_blkAddr >> 8);
+  head[3] = (uint8_t)(s_blkAddr);
+  head[4] = (uint8_t)(head[0] ^ head[1] ^ head[2] ^ head[3]);
+  uartSend(head, 5);
+  if (!uartAck(700)) return false;
+
+  uint32_t padded = (len + 3u) & ~3u;              /* F4 按 32 位写，补齐到 4 字节 */
+  uint8_t frame[2 + 256];
+  frame[0] = (uint8_t)(len - 1u);
+  uint8_t sum = frame[0];
+  for (uint32_t i = 0; i < padded; i++) {
+    uint8_t b = (i < len) ? s_blk[i] : 0xFF;
+    frame[1 + i] = b;
+    sum ^= b;
+  }
+  frame[1 + padded] = sum;
+  uartSend(frame, padded + 2u);
+  return uartAck(1200);
+}
+
+static void finishBlock(WiFiClient &client)
+{
+  bool ok = false;
+  uint8_t tries = 0;
+  for (tries = 1; tries <= 4 && !ok; tries++) {
+    ok = an3155WriteBlock();
+    if (!ok) an3155Resync();
+  }
+  char reply[24];
+  snprintf(reply, sizeof reply, "+B %s %u\r\n", ok ? "ok" : "err", (unsigned) (ok ? tries - 1u : tries - 1u));
+  client.write((const uint8_t *)reply, strlen(reply));
+  s_blkNeed = 0;
+  s_blkLen  = 0;
+}
+#endif
+
+
 void loop()
 {
   if (s_provisioning) {
@@ -445,12 +542,50 @@ void loop()
   if (pipeClient && pipeClient.connected()) {
     uint8_t buf[128];
     size_t n = 0;
+#if LINK_MODE == LINK_MODE_BLOCK
+    /* 块级 ACK：二进制负载按 "#B" 声明的长度直接吞下，不会把负载里的 '#' 当命令 */
+    while (pipeClient.available()) {
+      uint8_t ch = (uint8_t)pipeClient.read();
+      if (s_blkNeed) {
+        if (s_blkLen < sizeof s_blk) s_blk[s_blkLen++] = ch;
+        if (s_blkLen >= s_blkNeed) finishBlock(pipeClient);
+        continue;
+      }
+      if (s_lineLen || ch == '#') {
+        if (s_lineLen < sizeof s_line - 1) s_line[s_lineLen++] = (char)ch;
+        /* 只有 "#B" 才是命令：AN3155 的普通字节里 0x23 也可能是数据，不能误吞 */
+        if (s_lineLen == 2 && !(s_line[0] == '#' && s_line[1] == 'B')) {
+          Serial.write((const uint8_t *)s_line, s_lineLen);
+          pipeBytesDown += s_lineLen;
+          s_lineLen = 0;
+          continue;
+        }
+        if (ch == '\n') {
+          s_line[s_lineLen] = 0;
+          unsigned long addr = 0, len = 0;
+          if (sscanf(s_line, "#B %lx %lu", &addr, &len) == 2 && len >= 1 && len <= sizeof s_blk) {
+            s_blkAddr = (uint32_t)addr;
+            s_blkNeed = (uint32_t)len;
+            s_blkLen  = 0;
+          } else {
+            const char *bad = "+B bad\r\n";
+            pipeClient.write((const uint8_t *)bad, strlen(bad));
+          }
+          s_lineLen = 0;
+        }
+        continue;
+      }
+      Serial.write(ch);
+      pipeBytesDown += 1;
+    }
+#else
     while (pipeClient.available() && n < sizeof(buf)) buf[n++] = (uint8_t)pipeClient.read();
     if (n > 0) {
       Serial.write(buf, n);
       Serial.flush();
       pipeBytesDown += n;
     }
+#endif
     n = 0;
     while (Serial.available() && n < sizeof(buf)) buf[n++] = (uint8_t)Serial.read();
     if (n > 0) {
