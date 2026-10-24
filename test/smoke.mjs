@@ -1,12 +1,3 @@
-import { existsSync } from 'node:fs'
-import { join } from 'node:path'
-
-/* 用真实工程路径与 CubeMX/Keil 做集成验证；在没有这些前提的机器（CI）上跳过，而不是把环境缺失当成失败。 */
-const SKIP_FIXTURES = !existsSync(join(process.cwd(), '.tmp', 'code-copy', 'Clock.uvprojx'))
-if (process.env.DSH_STM32_CI === '1' || SKIP_FIXTURES) {
-  console.log('SKIP ' + 'smoke.mjs' + ' :: 用真实工程路径与 CubeMX/Keil 做集成验证')
-  process.exit(0)
-}
 import { doctor, readProject, buildProject } from '../lib/core.mjs'
 import { cp, mkdir, rm } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
@@ -18,6 +9,14 @@ const projects = [
 ]
 
 import { resolveChip } from '../lib/core.mjs'
+
+/* 用真实工程路径与 CubeMX/Keil 做集成验证；在没有这些前提的机器（CI）上跳过，而不是把环境缺失当成失败。 */
+const SKIP_FIXTURES = !existsSync('.tmp/code-copy/Clock.uvprojx')
+if (process.env.DSH_STM32_CI === '1' || SKIP_FIXTURES) {
+  console.log('SKIP ' + 'smoke.mjs' + ' :: 用真实工程路径与 CubeMX/Keil 做集成验证')
+  process.exit(0)
+}
+
 
 for (const [device, expectFamily, expectUart, forbid] of [
   ['STM32F411CEUx', 'STM32F4', 'USART6', 'USART3'],
