@@ -57,10 +57,15 @@
 #define PIN_BOOT0        2                /* GPIO2 -> BOOT0 */
 #define PIN_NRST         0                /* GPIO0 -> NRST  */
 #endif
-#define PIPE_BAUD        115200
+#ifndef PIPE_BAUD
+#define PIPE_BAUD        115200       /* 生成固件时由插件写入（wifi_creds.h）；也可 -D 覆盖 */
+#endif
 #define CTRL_PORT        3333
 #define PIPE_PORT        3334
 #define PULSE_MS_DEFAULT 100
+#define BOOT_SETTLE_MS   30           /* BOOT0 必须先稳住，再给复位沿 */
+#define RESET_PULSE_MS   200          /* 复位低电平时间 */
+#define BOOT_POST_MS     50           /* 释放后等芯片起来 */
 
 /* ESP GPIO0 drives NRST but is ALSO the ESP's own flash-mode strap: at power-up the
  * STM32 holds NRST low (its reset circuit), which can make the ESP sample GPIO0 low
@@ -297,8 +302,11 @@ static void handleCommand(String line)
   }
   if (line.equalsIgnoreCase("BOOTLOADER")) {
     boot0Set(1);
-    nrstPulse(PULSE_MS_DEFAULT);
-    ctrlPrintf("+BOOTLOADER\r\n");
+    delay(BOOT_SETTLE_MS);
+    nrstPulse(RESET_PULSE_MS);
+    delay(BOOT_POST_MS);
+    /* Read the pin back: 0 here means the wire to BOOT0 is not actually connected. */
+    ctrlPrintf("+BOOTLOADER boot0=%d\r\n", digitalRead(PIN_BOOT0));
     return;
   }
   if (line.equalsIgnoreCase("RUN")) {
