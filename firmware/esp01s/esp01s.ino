@@ -63,6 +63,8 @@
 #define PIN_STM_RX       16               /* GPIO16 = RX2  <- STM32 TX */
 #define PIN_STM_TX       17               /* GPIO17 = TX2  -> STM32 RX */
 #define STM              Serial2
+/* UART0 is free on the ESP32, so boot diagnostics are visible over USB. */
+#define DBG(...)         do { Serial.printf(__VA_ARGS__); Serial.flush(); } while (0)
 #elif BOARD_NODEMCU
 #define PIN_BOOT0        4                /* D2 -> STM32 BOOT0 */
 #define PIN_NRST         5                /* D1 -> STM32 NRST  */
@@ -71,6 +73,7 @@
 #define PIN_BOOT0        2                /* GPIO2 -> BOOT0 */
 #define PIN_NRST         0                /* GPIO0 -> NRST  */
 #define STM              Serial
+#define DBG(...)         do { } while (0)
 #endif
 /* 链路协议：由插件生成固件时写入 wifi_creds.h。stream = 透明管道（主机驱动 AN3155），
  * block = 块级 ACK，spool = 镜像缓存后 ESP 自烧。目前只有 stream 实现。 */
@@ -384,7 +387,9 @@ static void handleCommand(String line)
 /* ------------------------------- main --------------------------------- */
 void setup()
 {
+  DBG("\n[bridge] boot board=ESP32 baud=%d link=%s\n", PIPE_BAUD, LINK_NAME);
 #if defined(ESP32)
+  Serial.begin(115200);
   Serial2.setRxBufferSize(2048);
   Serial2.begin(PIPE_BAUD, SERIAL_8N1, PIN_STM_RX, PIN_STM_TX);
   Serial.begin(115200);                 /* USB debug only, never mixed with the pipe */
@@ -406,14 +411,17 @@ void setup()
   WiFi.setSleepMode(WIFI_NONE_SLEEP);   /* modem sleep stalls TCP sessions on this chip */
 #endif
   credsLoad();
+  DBG("[bridge] creds src=%s ssid=%s passLen=%u\n", s_wifiSrc, s_creds.ssid, (unsigned)strlen(s_creds.pass));
 
   bool ok = false;
   if (credsValid()) {
     ok = joinWifi(s_creds.ssid, s_creds.pass, STA_TIMEOUT_MS);
+    DBG("[bridge] join flash ssid=%s -> %s ip=%s\n", s_creds.ssid, ok ? "ok" : "fail", ipString().c_str());
     if (ok) s_wifiSrc = "flash";
   }
   if (!ok && strlen(WIFI_SSID) > 0) {
     ok = joinWifi(WIFI_SSID, WIFI_PASS, STA_TIMEOUT_MS);
+    DBG("[bridge] join build ssid=%s -> %s ip=%s\n", WIFI_SSID, ok ? "ok" : "fail", ipString().c_str());
     if (ok) s_wifiSrc = "build";
   }
   if (!ok) startProvisioning();

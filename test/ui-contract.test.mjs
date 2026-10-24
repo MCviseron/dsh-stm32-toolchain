@@ -24,6 +24,11 @@ check('a relayed message is marked with its origin',
   readFileSync(join(root, 'lib/index.js'), 'utf8').includes('text.startsWith(PANEL_PREFIX)'))
 check('sending follows the message into that session',
   client.includes('jumpToBoundSession(); }, 60);'))
+check('the board list comes from the snapshot, not a hardcoded fallback',
+  client.includes('(state.wifi && state.wifi.boards) ||') &&
+  client.includes('(state.wifi && state.wifi.board) ||') &&
+  !/state\.boards|state\.espBoard/.test(client) &&
+  bridge.includes('boards: Object.keys(BOARDS)'))
 check('the link mode is selectable and honest about what exists',
   client.includes('"链路模式"') && bridge.includes("case 'set-link-mode'") &&
   bridge.includes('尚未实现：先切回') && fsRead(join(root, 'lib/wifi-fw.mjs')).includes('LINK_MODES'))
