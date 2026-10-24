@@ -67,7 +67,6 @@ jobs:
 
       - name: Pack (what would ship)
         shell: bash
-        shell: bash
         run: |
           pnpm pack
           tar -tzf ./*.tgz | sort
