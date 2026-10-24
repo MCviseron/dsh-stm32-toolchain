@@ -66,7 +66,7 @@ check('initialize', init.result?.serverInfo?.name === 'dsh-stm32-toolchain', JSO
 
 const list = await rpc('tools/list', {})
 const tools = list.result?.tools ?? []
-check('tools/list has 15 tools', tools.length === 15, tools.map((t) => t.name).join(','))
+check('tools/list has 16 tools', tools.length === 16, tools.map((t) => t.name).join(','))
 
 const doctor = await rpc('tools/call', { name: 'stm32_doctor', arguments: {} })
 const doctorText = doctor.result?.content?.[0]?.text ?? ''
