@@ -67,7 +67,7 @@ function countGrids(node, depth = 0) {
   const own = style.display === 'grid' && String(style.gridTemplateColumns || '') === 'repeat(5, minmax(0, 1fr))' ? 1 : 0
   return own + countGrids(node.props && node.props.children, depth + 1)
 }
-check('stat cards fill rows of five (nine cards -> two rows)', countGrids(tree) === 2, 'grids=' + countGrids(tree))
+check('stat cards fill rows of five (ten cards -> two rows)', countGrids(tree) === 2, 'grids=' + countGrids(tree))
 
 /** Labels of the cards directly inside one card row. */
 function cardLabels(children) {
@@ -91,9 +91,9 @@ check('bundle exports the order helper', internals && typeof internals.resolveOr
 const custom = internals.resolveOrder('logs,lease,build,flash,chip,transport,port,firmware')
 check('a custom order is honoured', custom[0] === 'logs' && custom[7] === 'firmware', custom.join(','))
 check('unknown and duplicate ids are dropped',
-  JSON.stringify(internals.resolveOrder('logs,logs,bogus,chip')) === JSON.stringify(['logs', 'chip', 'transport', 'port', 'firmware', 'cube', 'build', 'flash', 'lease']),
+  JSON.stringify(internals.resolveOrder('logs,logs,bogus,chip')) === JSON.stringify(['logs', 'chip', 'transport', 'port', 'firmware', 'cube', 'build', 'flash', 'lease', 'lock']),
   JSON.stringify(internals.resolveOrder('logs,logs,bogus,chip')))
-check('an empty order falls back to the default', internals.resolveOrder('').length === 9 && internals.resolveOrder('')[0] === 'chip', internals.resolveOrder('').join(','))
+check('an empty order falls back to the default', internals.resolveOrder('').length === 10 && internals.resolveOrder('')[0] === 'chip', internals.resolveOrder('').join(','))
 check('dragging moves a slot, it does not swap',
   JSON.stringify(internals.moveCard(['a', 'b', 'c', 'd'], 0, 2)) === JSON.stringify(['b', 'c', 'a', 'd']) &&
   JSON.stringify(internals.moveCard(['a', 'b', 'c', 'd'], 3, 1)) === JSON.stringify(['a', 'd', 'b', 'c']),
@@ -228,9 +228,9 @@ check('settings card exposes the log text fields',
   ['logFontSize', 'logLineHeight', 'logMaxLines', 'logWrap', 'logTimestamps'].every((key) => bundle.includes('"' + key + '"')))
 
 const rows = cardRows(tree)
-check('rows hold five cards, then the rest',
-  rows.length === 2 && rows[0].length === 5 && rows[1].length === 4, JSON.stringify(rows))
-check('row 1 is identity plus CubeMX, row 2 is activity and logs',
+check('two full rows of five',
+  rows.length === 2 && rows[0].length === 5 && rows[1].length === 5, JSON.stringify(rows))
+check('row 1 is identity plus CubeMX, row 2 is activity, occupancy, lock and logs',
   JSON.stringify(rows[0]) === JSON.stringify(['芯片', '传输', '端口', '固件', 'CubeMX']) &&
-  JSON.stringify(rows[1]) === JSON.stringify(['编译', '烧录', '占用', '日志']),
+  JSON.stringify(rows[1]) === JSON.stringify(['编译', '烧录', '占用', '进程锁', '日志']),
   JSON.stringify(rows))
