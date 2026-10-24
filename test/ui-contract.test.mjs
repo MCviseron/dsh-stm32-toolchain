@@ -26,7 +26,7 @@ check('the .ioc is remembered per project', bridge.includes('iocByProject'))
 
 check('Card renders its children', /props\.children \|\| null/.test(client))
 check('the monitor baud can be auto-detected or picked',
-  client.includes('"波特率 自动"') && client.includes('label: "自动检测"') && client.includes('BAUD_CHOICES'))
+  client.includes('"波特率 自动"') && client.includes('"波特率 " + rate') && client.includes('var BAUD_CHOICES'))
 check('the ESP flashing baud has its own picker',
   client.includes('"ESP 串口速率（烧录/无线串口）"') && client.includes('set-esp-baud') && bridge.includes("case 'set-esp-baud'"))
 check('the bridge bakes the chosen baud into the firmware', bridge.includes('baud: settings.espBaud'))
