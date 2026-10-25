@@ -1,0 +1,47 @@
+# 已知问题 / 待办
+
+## ISSUE-001 · 全量缓存（spool）固件联网即重启循环（未修完）
+
+**状态**：挂起（2026-10-25，转去验证流式烧录）
+
+**现象**
+- 烧入 `link=spool` 的固件后，串口反复出现 `POWERON_RESET`，每次只走到：
+  ```
+  [bridge] boot board=ESP32 link=spool
+  [bridge] creds src=none ssid= passLen=0
+  ```
+  之后没有 `join build ...`，网络里也扫不到它（3333 不通）。
+
+**已修复的两个确定性 bug（都已进代码）**
+1. spool 版从未调用 `LittleFS.begin()` → `#I` 永远返回 `+I err nofs`。已改为**懒挂载**（首次 `#I` 时挂载并在失败时格式化）。
+2. 挂载代码最初被插进了 `PINSET` 分支而不是 `setup()`（已挪回）。
+
+**尚未定位**
+- 懒挂载版本仍然"启动后卡在 creds 之后"，疑似进入重启循环。
+- 候选原因：① 供电余量不足（spool 版大 42 KB + LittleFS 的 flash 写入抬高电流峰值）；② 我的 spool 解析分支在某个路径上阻塞；③ 别处崩溃。
+
+**下次要做的（按顺序）**
+1. 烧入带诊断的 spool 固件，看 `[bridge] reset=<poweron|brownout|panic|task_wdt>`：
+   - `brownout` → 供电问题，换 USB 口/加电容/加强共地，不是代码问题；
+   - `panic` → 按 backtrace 修；
+   - `poweron` → 继续查 spool 分支是否阻塞。
+2. 若仍无解，先用 stream/block 交付，spool 作为后续增强。
+
+**已经就绪但未验证的能力**（代码已写完、9 种编译组合全通过）
+- `#I/#S/#F/#Q/#A` 协议；
+- ESP 自驱 AN3155（复位 → 同步 → 擦除 → 256 字节写 → GO）；
+- 主机侧 `flashSpool()` 与 `test/spool.test.mjs`（7 条断言）。
+
+## ISSUE-002 · 这颗 F407 的 ROM 引导程序不接受 write memory（0x31）
+
+**状态**：排查中（2026-10-25）
+
+**现象**：同一通道中 `0x7F`(79)、`GetID`(`79 01 04 13 79`)、`0x44` 擦除(79) 都正常，唯独
+`0x31 CE → 79` 之后，**地址帧 `08 00 00 00 08` 从不返回 ACK**（无响应或 1f）。
+
+**已排除**
+- 传输保真：`LT 130`/`LT 1024` 回显逐字节全对；
+- 接线：`PINS` 读回 `boot0/nrst/rx2` 全部符合预期；BOOT0=GPIO4(D4)、NRST=GPIO5(D5) 已实测确认；
+- 帧格式：与参考实现 `lee-lord/esp8266_stm32_isp` 逐字节一致（命令对、地址 5 字节、N-1、数据、校验）。
+
+**下一步**：冷启动后按参考实现**全程连续无延迟**再跑一次；若仍失败，判定为芯片侧限制（选项字节写保护或 ROM 异常），届时走 ST-Link 或自研 bootloader（参考 `brachiGH/STM32_OTA_updater`）。
