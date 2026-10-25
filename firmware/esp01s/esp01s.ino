@@ -556,8 +556,11 @@ static void uartSend(const uint8_t *data, size_t n)
 #define AN3155_DATA_GAP_MS 0        /* 0 = 整帧连发（配合 60 s 等待先验证"是不是慢"） */
 #endif
 
+static void uartDrain(void) { while (STM.available()) STM.read(); }
+
 static bool an3155Command(uint8_t cmd)
 {
+  uartDrain();                           /* 丢掉残留字节，避免把旧的 0x1F 当成这次的回复 */
   uint8_t pair[2] = { cmd, (uint8_t)(cmd ^ 0xFF) };
   uartSend(pair, 2);                     /* 一次写完，不留间隙 */
   return uartAck(5000);
@@ -726,7 +729,7 @@ static bool spoolStore(uint32_t offset, const uint8_t *data, uint32_t len)
   return true;
 }
 
-static bool an3155Sync(uint8_t tries)
+static bool an3155SyncStrict(uint8_t tries)
 {
   for (uint8_t i = 0; i < tries; i++) {
     while (STM.available()) STM.read();
@@ -734,7 +737,11 @@ static bool an3155Sync(uint8_t tries)
     uartSend(&sync, 1);
     uint32_t deadline = millis() + 300;
     while ((int32_t)(millis() - deadline) < 0) {
-      if (STM.available()) { (void)STM.read(); return true; }
+      if (STM.available()) {
+        uint8_t b = (uint8_t)STM.read();
+        if (b == 0x79) return true;        /* 只有 ACK 才算同步成功；0x1F 说明芯片退回了等待态 */
+        return false;
+      }
       yield();
     }
   }
@@ -745,6 +752,7 @@ static const char *s_eraseWhy = "";
 
 static bool an3155Erase(uint8_t eraseCmd, uint8_t count, const uint8_t *lo, const uint8_t *hi)
 {
+  uartDrain();
   uint8_t pair[2] = { eraseCmd, (uint8_t)(eraseCmd ^ 0xFF) };
   uartSend(pair, 2);
   if (!uartAck(5000)) { s_eraseWhy = "cmd"; return false; }
@@ -827,7 +835,18 @@ static bool spoolRunFlash(WiFiClient &client, uint32_t base, uint8_t eraseCmd,
   nrstPulse(RESET_PULSE_MS);
   delay(BOOT_POST_MS);
 
-  if (!an3155Sync(40)) {
+  bool synced = false;
+  for (uint8_t round = 1; round <= 3 && !synced; round++) {
+    synced = an3155SyncStrict(40);
+    if (!synced) {
+      spoolReply(client, "+F retry sync %u\r\n", (unsigned)round);
+      boot0Set(1);
+      delay(BOOT_SETTLE_MS);
+      nrstPulse(RESET_PULSE_MS);
+      delay(BOOT_POST_MS);
+    }
+  }
+  if (!synced) {
     spoolReply(client, "+F err nosync\r\n");
     s_spoolState = "error";
     boot0Set(0);
@@ -835,7 +854,16 @@ static bool spoolRunFlash(WiFiClient &client, uint32_t base, uint8_t eraseCmd,
   }
   spoolReply(client, "+F sync ok\r\n");
 
-  if (!an3155Erase(eraseCmd, count, lo, hi)) {
+  bool erased = false;
+  for (uint8_t round = 1; round <= 5 && !erased; round++) {
+    erased = an3155Erase(eraseCmd, count, lo, hi);
+    if (!erased) {
+      spoolReply(client, "+F retry erase %u (%s)\r\n", (unsigned)round, s_eraseWhy);
+      (void)an3155SyncStrict(20);          /* 芯片只认 0x7F：拉回同步态再试 */
+      delay(20);
+    }
+  }
+  if (!erased) {
     spoolReply(client, "+F err erase %s\r\n", s_eraseWhy);
     s_spoolState = "error";
     boot0Set(0);
@@ -861,7 +889,7 @@ static bool spoolRunFlash(WiFiClient &client, uint32_t base, uint8_t eraseCmd,
     bool ok = false;
     for (uint8_t tries = 0; tries < 4 && !ok; tries++) {
       ok = an3155WriteAt(base + done, blk, (uint32_t)n);
-      if (!ok) { an3155Resync(); (void)an3155Sync(6); }
+      if (!ok) { an3155Resync(); (void)an3155SyncStrict(6); }
     }
     if (!ok) {
       f.close();
