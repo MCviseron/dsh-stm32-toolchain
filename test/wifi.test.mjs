@@ -21,6 +21,9 @@ check('the toolchain probe answers even without arduino-cli',
   typeof toolchain.ok === 'boolean' && toolchain.fqbn === BOARDS.nodemcu.fqbn && typeof toolchain.core === 'string',
   JSON.stringify({ ok: toolchain.ok, core: toolchain.core }))
 check('the sketch lives next to the plugin', toolchain.sketch === SKETCH_DIR)
+const fwSource = readFileSync(join(HERE, '..', 'lib', 'wifi-fw.mjs'), 'utf8')
+check('the firmware name carries the board and the link mode',
+  fwSource.includes("boardId + '-' + linkId + '-' + stamp") && fwSource.includes("bin + '.parts.json'"))
 check('every board has a compiling fqbn', Object.values(BOARDS).every((board) => typeof board.fqbn === 'string' && board.fqbn.includes(':')))
 
 const empty = await generateFirmware({})

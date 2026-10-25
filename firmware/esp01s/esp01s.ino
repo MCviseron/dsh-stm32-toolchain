@@ -388,12 +388,13 @@ static void handleCommand(String line)
 /* ------------------------------- main --------------------------------- */
 void setup()
 {
+#if defined(ESP32)
+  Serial.begin(115200);                 /* USB debug: must be up before the first DBG */
+#endif
   DBG("\n[bridge] boot board=ESP32 baud=%d link=%s\n", PIPE_BAUD, LINK_NAME);
 #if defined(ESP32)
-  Serial.begin(115200);
   Serial2.setRxBufferSize(2048);
   Serial2.begin(PIPE_BAUD, SERIAL_8N1, PIN_STM_RX, PIN_STM_TX);
-  Serial.begin(115200);                 /* USB debug only, never mixed with the pipe */
 #else
   STM.setRxBufferSize(1024);
   STM.begin(PIPE_BAUD);
