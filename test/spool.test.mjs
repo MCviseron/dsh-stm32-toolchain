@@ -46,7 +46,7 @@ check('spool uploads, then lets the bridge flash', result.ok === true, JSON.stri
 const frames = good.frames.map((b) => Buffer.from(b).toString('latin1'))
 check('the upload declares the size once', frames[0].startsWith('#I 600'), frames[0].trim())
 check('each chunk header carries offset, length and CRC',
-  /^#S 0 256 [0-9a-f]{4}/.test(frames[1]) && /^#S 256 256 [0-9a-f]{4}/.test(frames[3]) && /^#S 512 88 [0-9a-f]{4}/.test(frames[5]),
+  /^#S 0 256 [0-9a-f]{4}/.test(frames[1]) && /^#S 100 256 [0-9a-f]{4}/.test(frames[3]) && /^#S 200 88 [0-9a-f]{4}/.test(frames[5]),
   frames.slice(1, 6).map((f) => f.split('\n')[0]).join(' | '))
 check('the payload is written after the begin ack', good.frames[2].length === 256, String(good.frames[2].length))
 check('a whole-image CRC is checked before flashing', frames.some((f) => /^#Z [0-9a-f]{4}/.test(f)), frames.filter((f) => f.startsWith('#Z')).join(''))

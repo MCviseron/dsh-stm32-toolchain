@@ -551,11 +551,16 @@ static void uartSend(const uint8_t *data, size_t n)
   STM.flush();
 }
 
+#define AN3155_PAIR_GAP_MS 0     /* 实测：这块板接受连续发送（15:36 版就是这样写成功的） */
+#ifndef AN3155_DATA_GAP_MS
+#define AN3155_DATA_GAP_MS 0        /* 0 = 整帧连发（配合 60 s 等待先验证"是不是慢"） */
+#endif
+
 static bool an3155Command(uint8_t cmd)
 {
   uint8_t pair[2] = { cmd, (uint8_t)(cmd ^ 0xFF) };
-  uartSend(pair, 2);
-  return uartAck(700);
+  uartSend(pair, 2);                     /* 一次写完，不留间隙 */
+  return uartAck(5000);
 }
 
 static bool an3155Resync()
@@ -736,11 +741,13 @@ static bool an3155Sync(uint8_t tries)
   return false;
 }
 
+static const char *s_eraseWhy = "";
+
 static bool an3155Erase(uint8_t eraseCmd, uint8_t count, const uint8_t *lo, const uint8_t *hi)
 {
   uint8_t pair[2] = { eraseCmd, (uint8_t)(eraseCmd ^ 0xFF) };
   uartSend(pair, 2);
-  if (!uartAck(2000)) return false;
+  if (!uartAck(5000)) { s_eraseWhy = "cmd"; return false; }
 
   uint8_t frame[1 + 2 * 32 + 1];
   uint32_t p = 0;
@@ -759,18 +766,22 @@ static bool an3155Erase(uint8_t eraseCmd, uint8_t count, const uint8_t *lo, cons
   }
   frame[p++] = sum;
   uartSend(frame, p);
-  return uartAck(45000);                                       /* 擦除可能很慢 */
+  bool ok = uartAck(45000);                                    /* 擦除可能很慢 */
+  if (!ok) s_eraseWhy = "payload";
+  return ok;
 }
+
+static const char *s_writeWhy = "";
 
 static bool an3155WriteAt(uint32_t addr, const uint8_t *data, uint32_t len)
 {
-  if (!an3155Command(0x31)) return false;
+  if (!an3155Command(0x31)) { s_writeWhy = "cmd"; return false; }
   uint8_t head[5];
   head[0] = (uint8_t)(addr >> 24); head[1] = (uint8_t)(addr >> 16);
   head[2] = (uint8_t)(addr >> 8);  head[3] = (uint8_t)addr;
   head[4] = (uint8_t)(head[0] ^ head[1] ^ head[2] ^ head[3]);
   uartSend(head, 5);
-  if (!uartAck(900)) return false;
+  if (!uartAck(5000)) { s_writeWhy = "addr"; return false; }
 
   uint32_t padded = (len + 3u) & ~3u;
   static uint8_t frame[2 + 256];
@@ -782,8 +793,17 @@ static bool an3155WriteAt(uint32_t addr, const uint8_t *data, uint32_t len)
     sum ^= b;
   }
   frame[1 + padded] = sum;
-  uartSend(frame, padded + 2u);
-  return uartAck(1500);
+  if (AN3155_DATA_GAP_MS > 0) {                                /* 数据帧逐字节 + 间隙 */
+    for (uint32_t i = 0; i < padded + 2u; i++) {
+      uartSend(&frame[i], 1);
+      delay(AN3155_DATA_GAP_MS);
+    }
+  } else {
+    uartSend(frame, padded + 2u);
+  }
+  bool dataOk = uartAck(60000);          /* 万一只是慢：等满 1 分钟 */
+  if (!dataOk) s_writeWhy = "data";
+  return dataOk;
 }
 
 static bool an3155Go(uint32_t addr)
@@ -816,7 +836,7 @@ static bool spoolRunFlash(WiFiClient &client, uint32_t base, uint8_t eraseCmd,
   spoolReply(client, "+F sync ok\r\n");
 
   if (!an3155Erase(eraseCmd, count, lo, hi)) {
-    spoolReply(client, "+F err erase\r\n");
+    spoolReply(client, "+F err erase %s\r\n", s_eraseWhy);
     s_spoolState = "error";
     boot0Set(0);
     return false;
@@ -845,7 +865,7 @@ static bool spoolRunFlash(WiFiClient &client, uint32_t base, uint8_t eraseCmd,
     }
     if (!ok) {
       f.close();
-      spoolReply(client, "+F err write 0x%lx\r\n", (unsigned long)(base + done));
+      spoolReply(client, "+F err write 0x%lx %s\r\n", (unsigned long)(base + done), s_writeWhy);
       s_spoolState = "error";
       boot0Set(0);
       return false;
@@ -959,8 +979,9 @@ void loop()
             /* #Z <crc16>：整张镜像校验，通过才允许 #F */
             unsigned int want = 0;
             File zf = LittleFS.open(SPOOL_PATH, "r");
+            const bool zOpened = (bool)zf;
             uint16_t got = 0xFFFF;
-            if (zf) {
+            if (zOpened) {
               static uint8_t zbuf[256];
               size_t zn = 0;
               while ((zn = zf.read(zbuf, sizeof zbuf)) > 0) {
@@ -971,7 +992,7 @@ void loop()
               }
               zf.close();
             }
-            if (sscanf(s_spoolLine, "#Z %x", &want) == 1 && zf) {
+            if (sscanf(s_spoolLine, "#Z %x", &want) == 1 && zOpened) {
               spoolReply(pipeClient, "+Z %s %04x %lu\r\n", (got == (uint16_t)want) ? "ok" : "err", got, (unsigned long)s_spoolHave);
             } else {
               spoolReply(pipeClient, "+Z err nofile\r\n");
