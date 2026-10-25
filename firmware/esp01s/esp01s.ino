@@ -92,6 +92,13 @@
 #define LINK_NAME "stream"
 #endif
 
+#if LINK_MODE == LINK_MODE_SPOOL
+  #include <LittleFS.h>
+#endif
+#if defined(ESP32)
+  #include <esp_system.h>
+#endif
+
 #ifndef PIPE_BAUD
 #define PIPE_BAUD        115200       /* 生成固件时由插件写入（wifi_creds.h）；也可 -D 覆盖 */
 #endif
@@ -101,6 +108,10 @@
 #define BOOT_SETTLE_MS   30           /* BOOT0 必须先稳住，再给复位沿 */
 #define RESET_PULSE_MS   200          /* 复位低电平时间 */
 #define BOOT_POST_MS     50           /* 释放后等芯片起来 */
+
+#if LINK_MODE == LINK_MODE_SPOOL
+static bool s_spoolFsOk = false;   /* LittleFS mounted? spool needs it */
+#endif
 
 /* ESP GPIO0 drives NRST but is ALSO the ESP's own flash-mode strap: at power-up the
  * STM32 holds NRST low (its reset circuit), which can make the ESP sample GPIO0 low
@@ -300,12 +311,17 @@ static const char *staReason(int status)
 static bool joinWifi(const char *ssid, const char *pass, uint32_t timeoutMs)
 {
   if (ssid == NULL || ssid[0] == '\0') return false;
+  DBG("[bridge] join: mode(sta)\n");
   WiFi.mode(WIFI_STA);
+  DBG("[bridge] join: autoreconnect\n");
   WiFi.setAutoReconnect(true);
+  DBG("[bridge] join: begin(%s)\n", ssid);
   WiFi.begin(ssid, pass);
+  DBG("[bridge] join: waiting\n");
   strncpy(s_triedSsid, ssid, sizeof(s_triedSsid) - 1);
   uint32_t t0 = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - t0 < timeoutMs) delay(150);
+  DBG("[bridge] join: done status=%d\n", (int)WiFi.status());
   s_lastStaStatus = (int)WiFi.status();
   return WiFi.status() == WL_CONNECTED;
 }
@@ -428,7 +444,7 @@ static void handleCommand(String line)
       pinMode(s_pinNrst, INPUT);
       s_pinBoot0 = b;
       s_pinNrst = n;
-      pinMode(s_pinBoot0, OUTPUT);
+  pinMode(s_pinBoot0, OUTPUT);
       pinMode(s_pinNrst, OUTPUT);
       boot0Set(0);
       nrstSet(1);
@@ -455,6 +471,15 @@ void setup()
   Serial.begin(115200);                 /* USB debug: must be up before the first DBG */
 #endif
   DBG("\n[bridge] boot board=ESP32 baud=%d link=%s\n", PIPE_BAUD, LINK_NAME);
+#if defined(ESP32)
+  {
+    static const char *names[] = { "unknown", "poweron", "ext", "sw", "panic", "int_wdt",
+                                   "task_wdt", "wdt", "deepsleep", "brownout", "sdio" };
+    esp_reset_reason_t why = esp_reset_reason();
+    DBG("[bridge] reset=%s heap=%u\n",
+        (why >= 0 && why <= 10) ? names[why] : "?", (unsigned)ESP.getFreeHeap());
+  }
+#endif
 #if defined(ESP32)
   Serial2.setRxBufferSize(2048);
   Serial2.begin(PIPE_BAUD, SERIAL_8N1, PIN_STM_RX, PIN_STM_TX);
@@ -618,8 +643,6 @@ static void finishBlock(WiFiClient &client)
  *   #Q                               查询状态   -> +Q <state> <bytes>
  *   #A                               放弃       -> +A ok
  * ────────────────────────────────────────────────────────────────────────── */
-#include <LittleFS.h>
-
 static const char *SPOOL_PATH = "/stm32.bin";
 static uint32_t s_spoolTotal = 0;
 static uint32_t s_spoolHave  = 0;
@@ -637,6 +660,20 @@ static void rawFlush(void)
   s_rawLen = 0;
 }
 
+/* CRC-16/CCITT-FALSE：主机与 ESP 用同一套实现，逐片校验，校验不过就重发 */
+static uint16_t crc16ccitt(const uint8_t *data, uint32_t len)
+{
+  uint16_t crc = 0xFFFF;
+  for (uint32_t i = 0; i < len; i++) {
+    crc ^= (uint16_t)data[i] << 8;
+    for (uint8_t bit = 0; bit < 8; bit++) {
+      crc = (crc & 0x8000) ? (uint16_t)((crc << 1) ^ 0x1021) : (uint16_t)(crc << 1);
+    }
+  }
+  return crc;
+}
+
+static uint16_t s_pendCrc = 0;
 static uint32_t s_pendOff = 0;
 static uint32_t s_pendNeed = 0;
 static uint32_t s_pendLen = 0;
@@ -654,6 +691,15 @@ static void spoolReply(WiFiClient &client, const char *fmt, ...)
 
 static bool spoolFileOpen(uint32_t bytes)
 {
+  if (!s_spoolFsOk) {
+#if defined(ESP32)
+    s_spoolFsOk = LittleFS.begin(true);          /* format on first use */
+#else
+    s_spoolFsOk = LittleFS.begin();
+#endif
+    DBG("[bridge] littlefs %s\n", s_spoolFsOk ? "mounted" : "FAILED");
+  }
+  if (!s_spoolFsOk) return false;
   LittleFS.remove(SPOOL_PATH);
   File f = LittleFS.open(SPOOL_PATH, "w");
   if (!f) return false;
@@ -869,9 +915,14 @@ void loop()
       if (s_pendNeed) {                        /* "#S" 的负载：攒够再落盘 */
         if (s_pendLen < sizeof s_spoolBuf) s_spoolBuf[s_pendLen++] = ch;
         if (s_pendLen >= s_pendNeed) {
-          bool ok = spoolStore(s_pendOff, s_spoolBuf, s_pendLen);
-          if (ok) spoolReply(pipeClient, "+S ok %lu\r\n", (unsigned long)(s_pendOff + s_pendLen));
-          else spoolReply(pipeClient, "+S err disk\r\n");
+          uint16_t crcGot = crc16ccitt(s_spoolBuf, s_pendLen);
+          if (crcGot != s_pendCrc) {
+            spoolReply(pipeClient, "+S err crc %04x\r\n", crcGot);   /* 主机重发这一片 */
+          } else if (spoolStore(s_pendOff, s_spoolBuf, s_pendLen)) {
+            spoolReply(pipeClient, "+S ok %lu\r\n", (unsigned long)(s_pendOff + s_pendLen));
+          } else {
+            spoolReply(pipeClient, "+S err disk\r\n");
+          }
           s_pendNeed = 0;
           s_pendLen = 0;
         }
@@ -884,20 +935,46 @@ void loop()
           s_spoolLine[s_spoolLineLen] = 0;
           unsigned long a = 0, b = 0, c = 0;
           if (s_spoolLine[1] == 'I') {
+            s_pendNeed = 0; s_pendLen = 0;
             if (sscanf(s_spoolLine, "#I %lu", &a) == 1 && a > 0 && spoolFileOpen((uint32_t)a)) {
               spoolReply(pipeClient, "+I ok %lu\r\n", a);
               s_spoolState = "uploading";
             } else {
-              spoolReply(pipeClient, "+I err\r\n");
+              spoolReply(pipeClient, "+I err %s\r\n", s_spoolFsOk ? "frame" : "nofs");
             }
           } else if (s_spoolLine[1] == 'S') {
-            if (sscanf(s_spoolLine, "#S %lx %lu", &a, &b) == 2 && b > 0 && b <= sizeof s_spoolBuf &&
+            unsigned int crcIn = 0;
+            if (sscanf(s_spoolLine, "#S %lx %lu %x", &a, &b, &crcIn) == 3 && b > 0 && b <= sizeof s_spoolBuf &&
                 s_spoolTotal > 0 && a + b <= s_spoolTotal) {
+              s_pendCrc = (uint16_t)crcIn;
               s_pendOff = (uint32_t)a;
               s_pendNeed = (uint32_t)b;
               s_pendLen = 0;
+              /* 先回执，主机收到后再发数据：彻底消除"命令与负载错位"的可能 */
+              spoolReply(pipeClient, "+S begin %lu\r\n", (unsigned long)a);
             } else {
               spoolReply(pipeClient, "+S err frame\r\n");
+            }
+          } else if (s_spoolLine[1] == 'Z') {
+            /* #Z <crc16>：整张镜像校验，通过才允许 #F */
+            unsigned int want = 0;
+            File zf = LittleFS.open(SPOOL_PATH, "r");
+            uint16_t got = 0xFFFF;
+            if (zf) {
+              static uint8_t zbuf[256];
+              size_t zn = 0;
+              while ((zn = zf.read(zbuf, sizeof zbuf)) > 0) {
+                for (size_t i = 0; i < zn; i++) {
+                  got ^= (uint16_t)zbuf[i] << 8;
+                  for (uint8_t bit = 0; bit < 8; bit++) got = (got & 0x8000) ? (uint16_t)((got << 1) ^ 0x1021) : (uint16_t)(got << 1);
+                }
+              }
+              zf.close();
+            }
+            if (sscanf(s_spoolLine, "#Z %x", &want) == 1 && zf) {
+              spoolReply(pipeClient, "+Z %s %04x %lu\r\n", (got == (uint16_t)want) ? "ok" : "err", got, (unsigned long)s_spoolHave);
+            } else {
+              spoolReply(pipeClient, "+Z err nofile\r\n");
             }
           } else if (s_spoolLine[1] == 'F') {
             /* #F <base> <eraseCmd> <n> <s0,s1,...> */
