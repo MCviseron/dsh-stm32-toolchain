@@ -58,8 +58,8 @@
 #if defined(ESP32)
 /* ESP32 DevKit: UART2 talks to the STM32, UART0 stays free for USB debug.
  * GPIO 25/26 carry no boot strap, so driving BOOT0/NRST cannot misfire. */
-#define PIN_BOOT0        25               /* -> STM32 BOOT0 */
-#define PIN_NRST         26               /* -> STM32 NRST  */
+#define PIN_BOOT0        4                /* D4 -> STM32 BOOT0（实测：D25/D26 孔不通到 MCU） */
+#define PIN_NRST         5                /* D5 -> STM32 NRST  */
 #define PIN_STM_RX       16               /* GPIO16 = RX2  <- STM32 TX */
 #define PIN_STM_TX       17               /* GPIO17 = TX2  -> STM32 RX */
 #define STM              Serial2
@@ -192,15 +192,17 @@ static String ipString(void)
   return WiFi.localIP().toString();
 }
 
-static void boot0Set(int level) { digitalWrite(PIN_BOOT0, level ? HIGH : LOW); }
+static int s_pinBoot0 = PIN_BOOT0;
+static int s_pinNrst  = PIN_NRST;
+static void boot0Set(int level) { digitalWrite(s_pinBoot0, level ? HIGH : LOW); }
 
 /** level 1 = reset released, 0 = reset asserted. */
 static void nrstSet(int level)
 {
 #if NRST_INVERTED
-  digitalWrite(PIN_NRST, level ? LOW : HIGH);   /* transistor on = reset asserted */
+  digitalWrite(s_pinNrst, level ? LOW : HIGH);   /* transistor on = reset asserted */
 #else
-  digitalWrite(PIN_NRST, level ? HIGH : LOW);
+  digitalWrite(s_pinNrst, level ? HIGH : LOW);
 #endif
 }
 
@@ -226,7 +228,7 @@ static void banner(void)
 {
   ctrlPrintf("+READY mode=%s src=%s ssid=%s ip=%s boot0=%d nrst=%d baud=%d pipe=%d link=%s\r\n",
              s_provisioning ? "ap" : "sta", s_wifiSrc, activeSsid().c_str(), ipString().c_str(),
-             digitalRead(PIN_BOOT0), digitalRead(PIN_NRST), PIPE_BAUD, PIPE_PORT, LINK_NAME);
+             digitalRead(s_pinBoot0), digitalRead(s_pinNrst), PIPE_BAUD, PIPE_PORT, LINK_NAME);
   if (s_provisioning && s_lastStaStatus != 0) {
     ctrlPrintf("+LASTSTA tried=%s status=%d %s\r\n", s_triedSsid, s_lastStaStatus, staReason(s_lastStaStatus));
   }
@@ -371,7 +373,7 @@ static void handleCommand(String line)
     ctrlPrintf("+STATUS mode=%s src=%s ssid=%s ip=%s rssi=%d boot0=%d nrst=%d pipe=%s cmds=%lu rx=%lu tx=%lu up=%lu link=%s\r\n",
                s_provisioning ? "ap" : "sta", s_wifiSrc, activeSsid().c_str(), ipString().c_str(),
                s_provisioning ? 0 : WiFi.RSSI(),
-               digitalRead(PIN_BOOT0), digitalRead(PIN_NRST),
+               digitalRead(s_pinBoot0), digitalRead(s_pinNrst),
                (pipeClient && pipeClient.connected()) ? "on" : "off",
                (unsigned long)ctrlCount, (unsigned long)pipeBytesDown,
                (unsigned long)pipeBytesUp, (unsigned long)(millis() / 1000), LINK_NAME);
@@ -381,6 +383,67 @@ static void handleCommand(String line)
     ctrlPrintf("+REBOOT\r\n");
     delay(50);
     ESP.restart();
+  }
+  if (line.startsWith("PIN ")) {
+    /* 通用脚控：PIN <gpio> <0|1|z>，用来现场找出开发板 D 编号对应的真实 GPIO */
+    int gpio = -1, level = -1;
+    if (sscanf(line.c_str(), "PIN %d %d", &gpio, &level) == 2 && gpio >= 0 && gpio <= 39) {
+      if (level < 0 || level > 1) {
+        pinMode(gpio, INPUT);
+      } else {
+        pinMode(gpio, OUTPUT);
+        digitalWrite(gpio, level ? HIGH : LOW);
+      }
+      ctrlPrintf("+PIN %d %d\r\n", gpio, level);
+    } else {
+      ctrlPrintf("+PIN err\r\n");
+    }
+    return;
+  }
+  if (line.startsWith("PULL ")) {
+    /* 接线探测：PULL <gpio> <0=下拉|1=上拉>，随后用 IN <gpio> 读；外部上/下拉会压过内部弱上下拉 */
+    int gpio = -1, up = -1;
+    if (sscanf(line.c_str(), "PULL %d %d", &gpio, &up) == 2 && gpio >= 0 && gpio <= 39) {
+      pinMode(gpio, up ? INPUT_PULLUP : INPUT_PULLDOWN);
+      ctrlPrintf("+PULL %d %d\r\n", gpio, up);
+    } else {
+      ctrlPrintf("+PULL err\r\n");
+    }
+    return;
+  }
+  if (line.startsWith("IN ")) {
+    int gpio = -1;
+    if (sscanf(line.c_str(), "IN %d", &gpio) == 1 && gpio >= 0 && gpio <= 39) {
+      pinMode(gpio, INPUT);
+      ctrlPrintf("+IN %d %d\r\n", gpio, digitalRead(gpio));
+    } else {
+      ctrlPrintf("+IN err\r\n");
+    }
+    return;
+  }
+  if (line.startsWith("PINSET ")) {
+    int b = -1, n = -1;
+    if (sscanf(line.c_str(), "PINSET %d %d", &b, &n) == 2 && b >= 0 && b <= 39 && n >= 0 && n <= 39 && b != n) {
+      pinMode(s_pinBoot0, INPUT);
+      pinMode(s_pinNrst, INPUT);
+      s_pinBoot0 = b;
+      s_pinNrst = n;
+      pinMode(s_pinBoot0, OUTPUT);
+      pinMode(s_pinNrst, OUTPUT);
+      boot0Set(0);
+      nrstSet(1);
+      ctrlPrintf("+PINSET boot0=%d nrst=%d\r\n", s_pinBoot0, s_pinNrst);
+    } else {
+      ctrlPrintf("+PINSET err\r\n");
+    }
+    return;
+  }
+  if (line.equalsIgnoreCase("PINS")) {
+    /* 接线诊断：读回四根线的实际电平（BOOT0/NRST 由我们驱动，rx2 由 STM32 驱动） */
+    ctrlPrintf("+PINS boot0=%d nrst=%d rx2=%d tx2=%d\r\n",
+               digitalRead(s_pinBoot0), digitalRead(s_pinNrst),
+               digitalRead(PIN_STM_RX), digitalRead(PIN_STM_TX));
+    return;
   }
   ctrlPrintf("+ERR unknown\r\n");
 }
@@ -401,8 +464,8 @@ void setup()
   STM.setDebugOutput(false);
 #endif
 
-  pinMode(PIN_BOOT0, OUTPUT);
-  pinMode(PIN_NRST, OUTPUT);
+  pinMode(s_pinBoot0, OUTPUT);
+  pinMode(s_pinNrst, OUTPUT);
   boot0Set(0);
   nrstSet(1);
 
@@ -563,6 +626,17 @@ static uint32_t s_spoolHave  = 0;
 static const char *s_spoolState = "idle";
 static char     s_spoolLine[64];
 static uint8_t  s_spoolLineLen = 0;
+/* 原始字节攒一攒再发：逐字节写会让帧内出现毫秒级间隙，bootloader 会判成坏帧 */
+static uint8_t  s_raw[512];
+static size_t   s_rawLen = 0;
+static void rawFlush(void)
+{
+  if (!s_rawLen) return;
+  STM.write(s_raw, s_rawLen);
+  pipeBytesDown += s_rawLen;
+  s_rawLen = 0;
+}
+
 static uint32_t s_pendOff = 0;
 static uint32_t s_pendNeed = 0;
 static uint32_t s_pendLen = 0;
@@ -804,6 +878,7 @@ void loop()
         continue;
       }
       if (s_spoolLineLen || ch == '#') {
+        rawFlush();
         if (s_spoolLineLen < sizeof s_spoolLine - 1) s_spoolLine[s_spoolLineLen++] = (char)ch;
         if (ch == '\n') {
           s_spoolLine[s_spoolLineLen] = 0;
@@ -861,9 +936,10 @@ void loop()
         }
         continue;
       }
-      STM.write(ch);                           /* 非命令字节照旧透传 */
-      pipeBytesDown += 1;
+      if (s_rawLen >= sizeof s_raw) rawFlush();
+      s_raw[s_rawLen++] = ch;                  /* 非命令字节：攒起来成批发 */
     }
+    rawFlush();
 #elif LINK_MODE == LINK_MODE_BLOCK
     /* 块级 ACK：二进制负载按 "#B" 声明的长度直接吞下，不会把负载里的 '#' 当命令 */
     while (pipeClient.available()) {
@@ -877,9 +953,11 @@ void loop()
         if (s_lineLen < sizeof s_line - 1) s_line[s_lineLen++] = (char)ch;
         /* 只有 "#B" 才是命令：AN3155 的普通字节里 0x23 也可能是数据，不能误吞 */
         if (s_lineLen == 2 && !(s_line[0] == '#' && s_line[1] == 'B')) {
-          STM.write((const uint8_t *)s_line, s_lineLen);
-          pipeBytesDown += s_lineLen;
+          if (s_rawLen + s_lineLen > sizeof s_raw) rawFlush();
+          memcpy(s_raw + s_rawLen, s_line, s_lineLen);
+          s_rawLen += s_lineLen;
           s_lineLen = 0;
+          rawFlush();
           continue;
         }
         if (ch == '\n') {

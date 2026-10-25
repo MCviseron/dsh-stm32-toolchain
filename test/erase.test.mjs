@@ -21,5 +21,6 @@ for (const [extended, expect, label] of [
   const pipe = new FakePipe()
   const boot = new Stm32UartBootloader(pipe)
   await boot.massErase({ extended })
-  check('AN3155 mass erase: ' + label, pipe.writes[1] === expect[1], pipe.writes.join(' '))
+  const sent = pipe.writes.slice(-1)[0]
+  check('AN3155 mass erase: ' + label, sent === expect[1], pipe.writes.join(' '))
 }

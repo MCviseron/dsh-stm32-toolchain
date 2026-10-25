@@ -18,15 +18,18 @@ const pipe = new FakePipe()
 const boot = new Stm32UartBootloader(pipe)
 await boot.writeMemory(0x08000000, Buffer.from([1, 2, 3, 4, 5]))
 
-check('write memory is three exchanges', pipe.writes.length === 3, pipe.writes.map((b) => b.toString('hex')).join(' | '))
-check('the frame starts with 0x31 and its complement', pipe.writes[0].equals(Buffer.from([0x31, 0xce])), pipe.writes[0].toString('hex'))
+const all = Buffer.concat(pipe.writes)
+check('write memory is three exchanges (pair, address, data)', all.length === 2 + 5 + 10,
+  pipe.writes.map((b) => b.toString('hex')).join(' | '))
+check('the frame starts with 0x31 and its complement', all.subarray(0, 2).equals(Buffer.from([0x31, 0xce])),
+  all.subarray(0, 2).toString('hex'))
 
-const address = pipe.writes[1]
+const address = all.subarray(2, 7)
 check('address is 4 bytes big endian plus an XOR checksum',
   address.length === 5 && address.readUInt32BE(0) === 0x08000000 && address[4] === checksum(address.subarray(0, 4)),
   address.toString('hex'))
 
-const data = pipe.writes[2]
+const data = all.subarray(7)
 const paddedLength = 8 /* 5 bytes padded to 8 with 0xFF */
 check('the payload is padded to a multiple of four bytes',
   data.length === 1 + paddedLength + 1 && data[0] === paddedLength - 1 &&

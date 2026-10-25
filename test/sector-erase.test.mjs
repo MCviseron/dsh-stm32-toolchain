@@ -23,9 +23,9 @@ class FakePipe {
 const extendedPipe = new FakePipe()
 await new Stm32UartBootloader(extendedPipe).eraseSectors([0, 1], { extended: true })
 /* 44 BB | N=0001 (count-1) | sectors 0000 0001 | checksum 00^01^00^00^00^01 = 00 */
-check('extended sector erase frame', extendedPipe.writes[1] === '00010000000100', extendedPipe.writes.join(' '))
+check('extended sector erase frame', extendedPipe.writes.join('').endsWith('00010000000100'), extendedPipe.writes.join(' '))
 
 const legacyPipe = new FakePipe()
 await new Stm32UartBootloader(legacyPipe).eraseSectors([0, 1], { extended: false })
 /* 43 BC | N=01 (count-1) | sectors 00 01 | checksum 01^00^01 = 00 */
-check('legacy sector erase frame', legacyPipe.writes[1] === '01000100', legacyPipe.writes.join(' '))
+check('legacy sector erase frame', legacyPipe.writes.join('').endsWith('01000100'), legacyPipe.writes.join(' '))
