@@ -6,3 +6,8 @@ node_modules/
 .DS_Store
 test/_*.mjs
 firmware/**/build/
+
+# arduino-cli 会往工作目录写开发板索引（几十 MB，不入库）
+library_index.json
+library_index.json.sig
+.tmp/
