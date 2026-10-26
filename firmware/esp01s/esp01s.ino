@@ -437,7 +437,12 @@ static void handleCommand(String line)
     /* 接线探测：PULL <gpio> <0=下拉|1=上拉>，随后用 IN <gpio> 读；外部上/下拉会压过内部弱上下拉 */
     int gpio = -1, up = -1;
     if (sscanf(line.c_str(), "PULL %d %d", &gpio, &up) == 2 && gpio >= 0 && gpio <= 39) {
+#if defined(ESP32) || defined(ARDUINO_ARCH_ESP32)
       pinMode(gpio, up ? INPUT_PULLUP : INPUT_PULLDOWN);
+#else
+      /* ESP8266 只有 GPIO16 支持内部下拉 */
+      pinMode(gpio, up ? INPUT_PULLUP : INPUT);
+#endif
       ctrlPrintf("+PULL %d %d\r\n", gpio, up);
     } else {
       ctrlPrintf("+PULL err\r\n");
@@ -473,9 +478,14 @@ static void handleCommand(String line)
   }
   if (line.equalsIgnoreCase("PINS")) {
     /* 接线诊断：读回四根线的实际电平（BOOT0/NRST 由我们驱动，rx2 由 STM32 驱动） */
+#if defined(ESP32)
     ctrlPrintf("+PINS boot0=%d nrst=%d rx2=%d tx2=%d\r\n",
                digitalRead(s_pinBoot0), digitalRead(s_pinNrst),
                digitalRead(PIN_STM_RX), digitalRead(PIN_STM_TX));
+#else
+    ctrlPrintf("+PINS boot0=%d nrst=%d rx2=-1 tx2=-1\r\n",
+               digitalRead(s_pinBoot0), digitalRead(s_pinNrst));
+#endif
     return;
   }
   ctrlPrintf("+ERR unknown\r\n");
@@ -726,6 +736,26 @@ static void spoolReply(WiFiClient &client, const char *fmt, ...)
   vsnprintf(buf, sizeof buf, fmt, ap);
   va_end(ap);
   client.write((const uint8_t *)buf, strlen(buf));
+}
+
+/* 全量缓存的镜像上限：按 ESP32 DevKit 的缓存分区容量（0x160000 = 1.4 MB）定死 */
+#ifndef SPOOL_MAX_BYTES
+#define SPOOL_MAX_BYTES 0x160000UL
+#endif
+
+/* 缓存容量 = min(策略上限, 文件系统剩余)；镜像超过它就明确报错，而不是写到一半失败 */
+static size_t spoolCapacity(void)
+{
+#if defined(ESP32)
+  if (!LittleFS.begin(true)) return 0;
+  size_t total = LittleFS.totalBytes();
+  size_t used = LittleFS.usedBytes();
+  size_t freeBytes = total > used ? total - used : 0;
+#else
+  /* ESP8266 的 fs::FS 没有 totalBytes()/usedBytes()：只用策略上限 */
+  size_t freeBytes = (size_t)SPOOL_MAX_BYTES;
+#endif
+  return freeBytes > (size_t)SPOOL_MAX_BYTES ? (size_t)SPOOL_MAX_BYTES : freeBytes;
 }
 
 static bool spoolFileOpen(uint32_t bytes)
@@ -1028,11 +1058,20 @@ void loop()
             boot0Set(1);
             nrstSet(0);                 /* 上传期间把 MCU 按在复位：它跑 8N1，会污染 8E1 通道 */
             s_pendNeed = 0; s_pendLen = 0;
-            if (sscanf(s_spoolLine, "#I %lu", &a) == 1 && a > 0 && spoolFileOpen((uint32_t)a)) {
-              spoolReply(pipeClient, "+I ok %lu\r\n", a);
-              s_spoolState = "uploading";
+            if (sscanf(s_spoolLine, "#I %lu", &a) == 1 && a > 0) {
+              size_t cap = spoolCapacity();
+              if (spoolFileOpen((uint32_t)a)) {
+                spoolReply(pipeClient, "+I ok %lu\r\n", a);
+                s_spoolState = "uploading";
+              } else if (!s_spoolFsOk) {
+                spoolReply(pipeClient, "+I err nofs\r\n");
+              } else if ((uint32_t)a > cap) {
+                spoolReply(pipeClient, "+I err big %lu\r\n", (unsigned long)cap);   /* 镜像超出缓存容量 */
+              } else {
+                spoolReply(pipeClient, "+I err frame\r\n");
+              }
             } else {
-              spoolReply(pipeClient, "+I err %s\r\n", s_spoolFsOk ? "frame" : "nofs");
+              spoolReply(pipeClient, "+I err frame\r\n");
             }
           } else if (s_spoolLine[1] == 'S') {
             unsigned int crcIn = 0;
