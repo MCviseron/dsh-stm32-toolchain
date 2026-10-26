@@ -57,7 +57,15 @@ def main():
         op = cmd.get("op")
         if op == "open":
             try:
-                _port = serial.Serial(cmd["port"], int(cmd.get("baud", 115200)), timeout=0.05)
+                # the STM32 ROM bootloader speaks 8E1; 8N1 silently drops bytes with an even number of 1s
+                _port = serial.Serial(
+                    cmd["port"],
+                    int(cmd.get("baud", 115200)),
+                    bytesize=serial.EIGHTBITS,
+                    parity=serial.PARITY_EVEN,
+                    stopbits=serial.STOPBITS_ONE,
+                    timeout=0.05,
+                )
                 threading.Thread(target=reader, args=(_port,), daemon=True).start()
                 emit({"t": "ok", "op": "open", "port": cmd["port"], "baud": int(cmd.get("baud", 115200))})
             except Exception as exc:

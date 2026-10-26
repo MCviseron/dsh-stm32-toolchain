@@ -207,6 +207,17 @@ static int s_pinBoot0 = PIN_BOOT0;
 static int s_pinNrst  = PIN_NRST;
 static void boot0Set(int level) { digitalWrite(s_pinBoot0, level ? HIGH : LOW); }
 
+/* 引导程序是 8E1，用户程序是 8N1：按阶段重新配置同一个 UART */
+static void stmParity(bool bootloader)
+{
+#if defined(ESP32)
+  Serial2.begin(PIPE_BAUD, bootloader ? SERIAL_8E1 : SERIAL_8N1, PIN_STM_RX, PIN_STM_TX);
+#else
+  STM.begin(PIPE_BAUD, bootloader ? SERIAL_8E1 : SERIAL_8N1);
+#endif
+  delay(5);
+}
+
 /** level 1 = reset released, 0 = reset asserted. */
 static void nrstSet(int level)
 {
@@ -482,10 +493,11 @@ void setup()
 #endif
 #if defined(ESP32)
   Serial2.setRxBufferSize(2048);
-  Serial2.begin(PIPE_BAUD, SERIAL_8N1, PIN_STM_RX, PIN_STM_TX);
+  /* STM32 的 ROM 引导程序是 8E1（偶校验）：8N1 会让偶数个 1 的字节被当成校验错丢弃 */
+  Serial2.begin(PIPE_BAUD, SERIAL_8E1, PIN_STM_RX, PIN_STM_TX);
 #else
   STM.setRxBufferSize(1024);
-  STM.begin(PIPE_BAUD);
+  STM.begin(PIPE_BAUD, SERIAL_8E1);      /* 同上：引导程序要求偶校验 */
   STM.setDebugOutput(false);
 #endif
 
@@ -514,6 +526,17 @@ void setup()
     DBG("[bridge] join build ssid=%s -> %s ip=%s\n", WIFI_SSID, ok ? "ok" : "fail", ipString().c_str());
     if (ok) s_wifiSrc = "build";
   }
+
+#if LINK_MODE == LINK_MODE_SPOOL
+  if (s_wifiSrc[0] != '\0') {               /* 联网后再挂载：首次格式化要几秒 */
+#if defined(ESP32)
+    s_spoolFsOk = LittleFS.begin(true);
+#else
+    s_spoolFsOk = LittleFS.begin();
+#endif
+    DBG("[bridge] littlefs %s\n", s_spoolFsOk ? "mounted" : "FAILED");
+  }
+#endif
   if (!ok) startProvisioning();
 
   /* Both chips may have powered up together, with the STM32 stuck in its bootloader
@@ -829,6 +852,7 @@ static bool spoolRunFlash(WiFiClient &client, uint32_t base, uint8_t eraseCmd,
                           uint8_t count, const uint8_t *lo, const uint8_t *hi)
 {
   s_spoolState = "flashing";
+  stmParity(true);                      /* 引导程序：8E1 */
   spoolReply(client, "+F reset\r\n");
   boot0Set(1);
   delay(BOOT_SETTLE_MS);
@@ -850,6 +874,8 @@ static bool spoolRunFlash(WiFiClient &client, uint32_t base, uint8_t eraseCmd,
     spoolReply(client, "+F err nosync\r\n");
     s_spoolState = "error";
     boot0Set(0);
+    stmParity(false);
+    nrstPulse(RESET_PULSE_MS);
     return false;
   }
   spoolReply(client, "+F sync ok\r\n");
@@ -909,6 +935,7 @@ static bool spoolRunFlash(WiFiClient &client, uint32_t base, uint8_t eraseCmd,
   (void)an3155Go(base);                       /* 失败也无所谓：复位后照样运行 */
   boot0Set(0);
   nrstPulse(RESET_PULSE_MS);
+  stmParity(false);                           /* 交还给用户程序：8N1 */
   spoolReply(client, "+F ok %lu\r\n", (unsigned long)(millis() - t0));
   s_spoolState = "done";
   return true;
@@ -935,18 +962,19 @@ void loop()
       banner();
     }
   }
+  /* 总是接受新连接并顶掉旧的：半死连接会让主机永远拿不到管道 */
+  WiFiClient fresh = pipeServer.available();
+  if (fresh) {
+    if (pipeClient) pipeClient.stop();
+    pipeClient = fresh;
+    pipeClient.setNoDelay(true);
+    s_pendNeed = 0;
+    s_pendLen = 0;
+    s_spoolLineLen = 0;
+  }
   if (pipeClient && !pipeClient.connected()) {
     pipeClient.stop();
   }
-  if (!pipeClient || !pipeClient.connected()) {
-    WiFiClient fresh = pipeServer.available();
-    if (fresh) {
-      pipeClient = fresh;
-      pipeClient.setNoDelay(true);
-      while (STM.available()) STM.read();
-    }
-  }
-
   if (ctrlClient && ctrlClient.connected()) {
     while (ctrlClient.available()) {
       String line = ctrlClient.readStringUntil('\n');
@@ -983,6 +1011,8 @@ void loop()
           s_spoolLine[s_spoolLineLen] = 0;
           unsigned long a = 0, b = 0, c = 0;
           if (s_spoolLine[1] == 'I') {
+            boot0Set(1);
+            nrstSet(0);                 /* 上传期间把 MCU 按在复位：它跑 8N1，会污染 8E1 通道 */
             s_pendNeed = 0; s_pendLen = 0;
             if (sscanf(s_spoolLine, "#I %lu", &a) == 1 && a > 0 && spoolFileOpen((uint32_t)a)) {
               spoolReply(pipeClient, "+I ok %lu\r\n", a);
