@@ -217,9 +217,7 @@ static void stmParity(bool bootloader)
 #if defined(ESP32)
   Serial2.begin(PIPE_BAUD, bootloader ? SERIAL_8E1 : SERIAL_8N1, PIN_STM_RX, PIN_STM_TX);
 #else
-#if !defined(ESP32)
   STM.setRxBufferSize(2048);
-#endif
   STM.begin(PIPE_BAUD, bootloader ? SERIAL_8E1 : SERIAL_8N1);
 #endif
   delay(5);
@@ -515,10 +513,7 @@ void setup()
   /* STM32 的 ROM 引导程序是 8E1（偶校验）：8N1 会让偶数个 1 的字节被当成校验错丢弃 */
   Serial2.begin(PIPE_BAUD, SERIAL_8E1, PIN_STM_RX, PIN_STM_TX);
 #else
-  STM.setRxBufferSize(1024);
-#if !defined(ESP32)
-  STM.setRxBufferSize(2048);             /* 258 字节的 AN3155 数据帧装得下 */
-#endif
+  STM.setRxBufferSize(2048);             /* ESP8266 默认 256：258 字节的 AN3155 数据帧会溢出 */
   STM.begin(PIPE_BAUD, SERIAL_8E1);      /* 同上：引导程序要求偶校验 */
   STM.setDebugOutput(false);
 #endif
