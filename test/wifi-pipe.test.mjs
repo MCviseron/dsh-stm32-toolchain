@@ -21,6 +21,8 @@ const ctrl = createServer((socket) => {
       commands.push(line)
       if (line === 'PING') socket.write('+PONG 1234\r\n')
       else if (line === 'STATUS') socket.write('+STATUS mode=sta ip=127.0.0.1\r\n')
+      else if (line === 'BOOTLOADER') socket.write('+BOOTLOADER boot0=1\r\n')
+      else if (line === 'RUN') socket.write('+RUN\r\n')
       else if (line.startsWith('BOOT ')) socket.write('+BOOT ' + line.slice(5) + '\r\n')
       else if (line.startsWith('PULSE')) socket.write('+PULSE ' + line.slice(6).trim() + '\r\n')
       else socket.write('+ERR unknown\r\n')
