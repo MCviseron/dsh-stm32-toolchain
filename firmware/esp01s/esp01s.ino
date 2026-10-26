@@ -84,6 +84,10 @@
 #ifndef LINK_MODE
 #define LINK_MODE LINK_MODE_STREAM
 #endif
+/* 原始字节攒批缓冲：stream/block/spool 三个分支共用 */
+static uint8_t  s_raw[512];
+static size_t   s_rawLen = 0;
+
 #if LINK_MODE == LINK_MODE_BLOCK
 #define LINK_NAME "block"
 #elif LINK_MODE == LINK_MODE_SPOOL
@@ -369,6 +373,7 @@ static void handleCommand(String line)
     return;
   }
   if (line.equalsIgnoreCase("BOOTLOADER")) {
+    stmParity(true);                 /* 引导程序是 8E1，必须在复位前切好 */
     boot0Set(1);
     delay(BOOT_SETTLE_MS);
     nrstPulse(RESET_PULSE_MS);
@@ -379,6 +384,7 @@ static void handleCommand(String line)
   }
   if (line.equalsIgnoreCase("RUN")) {
     boot0Set(0);
+    stmParity(false);                /* 用户程序是 8N1 */
     nrstPulse(PULSE_MS_DEFAULT);
     ctrlPrintf("+RUN\r\n");
     return;
@@ -618,6 +624,8 @@ static uint32_t s_blkLen  = 0;
 static char     s_line[24];
 static uint8_t  s_lineLen = 0;
 
+static void rawFlushBlk(void) { if (s_rawLen) { STM.write(s_raw, s_rawLen); pipeBytesDown += s_rawLen; s_rawLen = 0; } }
+
 static bool an3155WriteBlock()
 {
   uint32_t len = s_blkLen;
@@ -663,6 +671,8 @@ static void finishBlock(WiFiClient &client)
 #endif
 
 
+/* 原始字节攒批缓冲：block 与 spool 两个分支共用 */
+
 #if LINK_MODE == LINK_MODE_SPOOL
 /* ── 全量缓存 ────────────────────────────────────────────────────────────────
  * 主机先把镜像塞进 ESP 的文件系统，ESP 再自己跑 AN3155（复位 → 同步 → 擦除
@@ -681,8 +691,6 @@ static const char *s_spoolState = "idle";
 static char     s_spoolLine[64];
 static uint8_t  s_spoolLineLen = 0;
 /* 原始字节攒一攒再发：逐字节写会让帧内出现毫秒级间隙，bootloader 会判成坏帧 */
-static uint8_t  s_raw[512];
-static size_t   s_rawLen = 0;
 static void rawFlush(void)
 {
   if (!s_rawLen) return;
@@ -968,9 +976,15 @@ void loop()
     if (pipeClient) pipeClient.stop();
     pipeClient = fresh;
     pipeClient.setNoDelay(true);
+#if LINK_MODE == LINK_MODE_SPOOL
     s_pendNeed = 0;
     s_pendLen = 0;
     s_spoolLineLen = 0;
+#elif LINK_MODE == LINK_MODE_BLOCK
+    s_blkNeed = 0;
+    s_blkLen = 0;
+    s_lineLen = 0;
+#endif
   }
   if (pipeClient && !pipeClient.connected()) {
     pipeClient.stop();
@@ -1097,7 +1111,6 @@ void loop()
     }
     rawFlush();
 #elif LINK_MODE == LINK_MODE_BLOCK
-    /* 块级 ACK：二进制负载按 "#B" 声明的长度直接吞下，不会把负载里的 '#' 当命令 */
     while (pipeClient.available()) {
       uint8_t ch = (uint8_t)pipeClient.read();
       if (s_blkNeed) {
@@ -1109,11 +1122,11 @@ void loop()
         if (s_lineLen < sizeof s_line - 1) s_line[s_lineLen++] = (char)ch;
         /* 只有 "#B" 才是命令：AN3155 的普通字节里 0x23 也可能是数据，不能误吞 */
         if (s_lineLen == 2 && !(s_line[0] == '#' && s_line[1] == 'B')) {
-          if (s_rawLen + s_lineLen > sizeof s_raw) rawFlush();
+          if (s_rawLen + s_lineLen > sizeof s_raw) rawFlushBlk();
           memcpy(s_raw + s_rawLen, s_line, s_lineLen);
           s_rawLen += s_lineLen;
           s_lineLen = 0;
-          rawFlush();
+          rawFlushBlk();
           continue;
         }
         if (ch == '\n') {
