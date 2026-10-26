@@ -47,8 +47,8 @@ check('ping reaches the control port', (await pipe.ping()).includes('+PONG'), co
 check('status reports the station', (await pipe.status()).includes('mode=sta'))
 
 await pipe.enterBootloader({ pulseMs: 100 })
-check('enterBootloader asserts BOOT0 then pulses reset',
-  commands.slice(-2).join('|') === 'BOOT 1|PULSE 100', commands.slice(-2).join('|'))
+check('enterBootloader asks the ESP for bootloader framing (8E1) and resets',
+  commands.at(-1) === 'BOOTLOADER', commands.at(-1))
 
 await pipe.write([0x7f])
 check('bytes written to the pipe come back (echo)', (await pipe.readByte(1000)) === 0x7f)
@@ -71,8 +71,8 @@ check('manual mode asserts BOOT0 without a reset pulse',
   commands.at(-1) === 'BOOT 1', commands.at(-1))
 
 await pipe.run(50)
-check('run releases BOOT0', commands.slice(-2).join('|') === 'BOOT 0|PULSE 50', commands.slice(-2).join('|'))
-
+check('run asks for the application framing (8N1)',
+  commands.at(-1) === 'RUN', commands.at(-1))
 await pipe.close()
 ctrl.close()
 data.close()
