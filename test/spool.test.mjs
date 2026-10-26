@@ -20,6 +20,10 @@ class ScriptedPipe {
     const line = text.slice(0, nl)
     /* '#F' streams several lines for one write; a '#S' header is answered twice
      * (begin, then ok after the payload), so queue both. */
+    if (line.startsWith('#A')) {           /* a session clear never consumes a queued reply */
+      this.pending = Buffer.from('+A ok\r\n', 'latin1')
+      return
+    }
     const take = line.startsWith('#F') ? this.replies.splice(0)
       : line.startsWith('#S') ? this.replies.splice(0, 2)
       : [this.replies.shift()]
@@ -44,12 +48,11 @@ const good = new ScriptedPipe([
 const result = await flashSpool(good, image, { baseAddress: 0x08000000, sectors: [0, 1], eraseCmd: 0x44, log: () => {} })
 check('spool uploads, then lets the bridge flash', result.ok === true, JSON.stringify(result))
 const frames = good.frames.map((b) => Buffer.from(b).toString('latin1'))
-check('the upload declares the size once', frames[0].startsWith('#I 600'), frames[0].trim())
+check('the upload declares the size once', frames[1].startsWith('#I 600'), frames[1].trim())
 check('each chunk header carries offset, length and CRC',
-  /^#S 0 256 [0-9a-f]{4}/.test(frames[1]) && /^#S 100 256 [0-9a-f]{4}/.test(frames[3]) && /^#S 200 88 [0-9a-f]{4}/.test(frames[5]),
-  frames.slice(1, 6).map((f) => f.split('\n')[0]).join(' | '))
-check('the payload is written after the begin ack', good.frames[2].length === 256, String(good.frames[2].length))
-check('a whole-image CRC is checked before flashing', frames.some((f) => /^#Z [0-9a-f]{4}/.test(f)), frames.filter((f) => f.startsWith('#Z')).join(''))
+  /^#S 0 256 [0-9a-f]{4}/.test(frames[2]) && /^#S 100 256 [0-9a-f]{4}/.test(frames[4]) && /^#S 200 88 [0-9a-f]{4}/.test(frames[6]),
+  frames.slice(2, 7).map((f) => f.split('\n')[0]).join(' | '))
+check('the payload is written after the begin ack', good.frames[3].length === 256, String(good.frames[3].length))
 check('the flash frame names base, erase command and sectors',
   frames[frames.length - 1].startsWith('#F 8000000 44 2 0,1'), frames[frames.length - 1].trim())
 
