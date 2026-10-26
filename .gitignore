@@ -11,3 +11,16 @@ firmware/**/build/
 library_index.json
 library_index.json.sig
 .tmp/
+
+# arduino-cli / 构建过程中在这里生成的临时物（不属于源码）
+packages/
+staging/
+inventory.yaml
+package_index.json
+package_index.json.sig
+%SystemDrive%/
+firmware/esp01s/build/
+firmware/esp01s/build-*/
+.tmp/
+library_index.json
+library_index.json.sig
