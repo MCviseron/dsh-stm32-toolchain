@@ -33,7 +33,7 @@ check('the link mode is selectable and honest about what exists',
   client.includes('"链路模式"') && bridge.includes("case 'set-link-mode'") &&
   bridge.includes('尚未实现：先切回') && fsRead(join(root, 'lib/wifi-fw.mjs')).includes('LINK_MODES'))
 check('the chosen link mode is baked into the firmware',
-  fsRead(join(root, 'lib/wifi-fw.mjs')).includes("'#define LINK_MODE ' + mode.define") &&
+  fsRead(join(root, 'lib/wifi-fw.mjs')).includes("'#define LINK_MODE ' + mode.value") &&
   bridge.includes('linkMode: settings.linkMode'))
 check('the lease card reads the field the bridge actually sends',
   client.includes("Number(lease.expiresInSeconds)") && !client.includes("lease.expiresAt || 0"))
