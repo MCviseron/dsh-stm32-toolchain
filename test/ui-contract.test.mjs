@@ -18,7 +18,12 @@ function check(name, condition, detail) {
 check('serial writes are echoed to the 串口 channel', /log\('serial', '→ '\s*\+/.test(bridge))
 check('the echo can be switched off', bridge.includes("'set-serial-echo'") && bridge.includes('settings.serialEcho !== false'))
 check('the echo is logged only after a successful write',
-  bridge.indexOf("→ ' + text") > bridge.indexOf("await monitor.pipe.write") && bridge.includes('→ 发送失败：'))
+  (function () {
+    /* 宏 / 连续发送也会回显，所以只在 serial-write 这一段里比较先后 */
+    const slice = bridge.slice(bridge.indexOf("case 'serial-write'"))
+    return slice.indexOf('→ ' + "' + text") > slice.indexOf('await monitor.pipe.write') &&
+      slice.includes('→ 发送失败：')
+  })())
 check('a relayed message is marked with its origin',
   readFileSync(join(root, 'lib/index.js'), 'utf8').includes("PANEL_PREFIX = '[来自stm32总管]'") &&
   readFileSync(join(root, 'lib/index.js'), 'utf8').includes('text.startsWith(PANEL_PREFIX)'))
