@@ -510,11 +510,12 @@ void setup()
 #endif
 #if defined(ESP32)
   Serial2.setRxBufferSize(2048);
-  /* STM32 的 ROM 引导程序是 8E1（偶校验）：8N1 会让偶数个 1 的字节被当成校验错丢弃 */
-  Serial2.begin(PIPE_BAUD, SERIAL_8E1, PIN_STM_RX, PIN_STM_TX);
+  /* 上电用「用户程序」的格式 8N1：串口监视开箱即用，不必先发 RUN。
+   * 引导程序要 8E1，会在 BOOTLOADER 命令 / 全量缓存自烧开始时再切过去。 */
+  Serial2.begin(PIPE_BAUD, SERIAL_8N1, PIN_STM_RX, PIN_STM_TX);
 #else
   STM.setRxBufferSize(2048);             /* ESP8266 默认 256：258 字节的 AN3155 数据帧会溢出 */
-  STM.begin(PIPE_BAUD, SERIAL_8E1);      /* 同上：引导程序要求偶校验 */
+  STM.begin(PIPE_BAUD, SERIAL_8N1);      /* 上电 8N1（应用格式）；烧录时由 BOOTLOADER 切到 8E1 */
   STM.setDebugOutput(false);
 #endif
 
