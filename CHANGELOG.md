@@ -7,6 +7,10 @@
 > 本文件曾在开发中被误覆盖，0.1.0 的内容是依据当时的开发记录重建的：条目真实，
 > 但原始措辞已不可考。
 
+## [Unreleased]
+
+- 兼容 DSH 0.2.1-rc.5（`@deepseek-ai/dsh-mcp-client` 的 `Config` 字段与 `apply/inject/Config/name` 导出均已核对，现有范围 `^0.2.1-rc.2` 已覆盖）。
+
 ## [0.2.5] - 2026-10-26
 
 此版本用于 npm 发布。
