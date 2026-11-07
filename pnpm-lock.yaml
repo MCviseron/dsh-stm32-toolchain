@@ -15,7 +15,7 @@ importers:
         specifier: ^0.1.5-rc.2 || ^0.2.0-rc.2 || ^0.2.1-rc.2
         version: 0.2.1-rc.3(@deepseek-ai/cordis@4.0.5)
       '@deepseek-ai/dsh-mcp-client':
-        specifier: ^0.1.5-rc.2 || ^0.2.0-rc.2 || ^0.2.1-rc.2
+        specifier: ^0.1.5-rc.2 || ^0.2.0-rc.2 || ^0.2.1-rc.2 || ^0.2.2-rc.1
         version: 0.1.5-rc.2(@deepseek-ai/cordis@4.0.5)(@deepseek-ai/dsh-attachment@0.1.5-rc.3(@deepseek-ai/cordis@4.0.5)(@deepseek-ai/dsh-brand@0.1.5-rc.3(@deepseek-ai/cordis@4.0.5)))(@deepseek-ai/dsh-llm@0.1.5-rc.3(@deepseek-ai/cordis@4.0.5))(@deepseek-ai/dsh-scope@0.1.5-rc.3(@deepseek-ai/cordis@4.0.5)(@deepseek-ai/dsh-invariants@0.1.5-rc.3(@deepseek-ai/cordis@4.0.5)))(@deepseek-ai/dsh-subprocess@0.1.5-rc.3(@deepseek-ai/cordis@4.0.5)(@deepseek-ai/dsh-http-proxy@0.1.5-rc.3(@deepseek-ai/cordis@4.0.5)))(@deepseek-ai/dsh-timeout@0.1.5-rc.3(@deepseek-ai/cordis@4.0.5))(@deepseek-ai/dsh-tools@0.1.5-rc.3(54d884a9e99ddb53b1bcec748249840a))
       '@deepseek-ai/schemastery':
         specifier: ^3.18.4
