@@ -1,6 +1,6 @@
 {
   "name": "dsh-stm32-toolchain",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "description": "DSH plugin: Keil build, STM32CubeMX, serial monitor and flashing (ST-Link, UART bootloader, Wi-Fi bridge) in one panel",
   "license": "MIT",
   "author": {
@@ -64,7 +64,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@deepseek-ai/dsh-mcp-client": "^0.1.5-rc.2 || ^0.2.0-rc.2 || ^0.2.1-rc.2",
+    "@deepseek-ai/dsh-mcp-client": "^0.1.5-rc.2 || ^0.2.0-rc.2 || ^0.2.1-rc.2 || ^0.2.2-rc.1",
     "@deepseek-ai/schemastery": "^3.18.4"
   },
   "peerDependencies": {
