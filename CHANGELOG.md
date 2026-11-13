@@ -7,7 +7,9 @@
 > 本文件曾在开发中被误覆盖，0.1.0 的内容是依据当时的开发记录重建的：条目真实，
 > 但原始措辞已不可考。
 
-## [Unreleased]
+## [0.2.8] - 2026-11-13
+
+- 兼容 DSH 0.2.2-rc.3：`@deepseek-ai/dsh-mcp-client` 现有范围 `^0.2.2-rc.1` 已覆盖（同元组预发布），无需追加；已核对 rc.3 的导出（`Config/ReconnectSchema/SERVER_NAME_PATTERN/apply/assertTemplateSyntax/connectionStatusOf/createMcpToolDefinition/inject/name/probeServer/resolveReconnectPolicy`）与 `serverName/command/args/env/cwd/toolCallTimeoutMs/failOnStartupError/reconnect` 字段均在。
 
 - 新增板型 **ESP32-S3 (N16R8)**：`esp_sr_16` 分区（3 MB 应用 / 6 MB 文件系统），全量缓存上限 5.5 MB；二级引导程序按板型写到 0x0，`--chip` 跟随板型（esp32s3）；传输下拉新增占位项「SW 远程烧录/调试（未实现）」，选中后烧录会明确报错。
 
